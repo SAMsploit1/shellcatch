@@ -3,6 +3,7 @@
 Running record of contributions for the Wazuh Ambassador program.
 
 Repo: https://github.com/SAMsploit1/shellcatch
+Site: https://samsploit1.github.io/shellcatch/
 
 | Date | Type | Title | Link / location | Status |
 |------|------|-------|-----------------|--------|
