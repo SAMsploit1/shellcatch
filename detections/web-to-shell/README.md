@@ -1,0 +1,122 @@
+# Wazuh detection: web-to-shell (PHP & Node.js)
+
+Detects a web runtime — PHP-FPM, `mod_php`, or Node.js — spawning a process.
+That behaviour covers the whole post-exploitation chain for web attacks:
+webshells, OS command injection, and deserialization/RCE bugs such as the
+React/Next.js "React2Shell" class. A PHP or Node worker almost never needs to
+run `id`, `curl`, or `/bin/sh`, so when it does, it is worth an alert.
+
+Wazuh ships no rule for this out of the box. This pack adds one, across three
+layers, all mapped to MITRE ATT&CK.
+
+| Layer | Source | What it catches | Rule IDs |
+|-------|--------|-----------------|----------|
+| 1. Process execution | auditd `execve` | web account runs a shell, recon tool, downloader, interpreter, reverse shell | `100500`–`100550` |
+| 2. Web requests | nginx/apache access log | command-exec payloads, webshell URLs, `cmd=` params | `100560`–`100562` |
+| 3. File integrity | Wazuh FIM | new `.php`/`.phtml`/`.phar` in webroot, new `.js` in app dir, `.htaccess`/`.user.ini` tampering | `100570`–`100572` |
+
+Severity climbs with intent: a bare shell spawn is level 8, discovery and
+downloads are 10–12, and reverse-shell patterns are 15. Three
+post-exploitation commands from the same web account inside two minutes
+escalate to level 14 as a likely interactive webshell.
+
+## Why the web service account is the signal
+
+auditd records the UID that called `execve`, not the parent process. So the
+detection keys on the **account** the runtime runs as, used as a proxy for
+"this came from the web app." That means:
+
+- Run PHP-FPM / Apache as `www-data` (or `apache`/`nginx`) — the default.
+- **Run Node.js under its own dedicated service account** (`nodeapp` here), not
+  as root or your login user. The lab's systemd unit shows this.
+
+Edit the account names at the top of [auditd/60-web-to-shell.rules](auditd/60-web-to-shell.rules)
+to match your hosts.
+
+## Install
+
+On each **web server** (the Wazuh agent):
+
+```bash
+# 1. auditd rules  (edit the account names first)
+sudo cp auditd/60-web-to-shell.rules /etc/audit/rules.d/
+sudo augenrules --load
+sudo auditctl -l | grep web_exec        # confirm they loaded
+
+# 2. agent config: audit log, access log, FIM
+sudo cat wazuh/agent_ossec.conf >> /var/ossec/etc/ossec.conf
+sudo systemctl restart wazuh-agent
+```
+
+On the **Wazuh manager**:
+
+```bash
+sudo cp wazuh/web_to_shell_rules.xml /var/ossec/etc/rules/
+sudo systemctl restart wazuh-manager
+```
+
+Rule IDs `100500`–`100599` must be free in your custom ruleset.
+
+## Validate
+
+Against a throwaway manager container (needs Docker, ~1 min):
+
+```bash
+./tests/run.sh
+```
+
+This mounts the ruleset into a fresh `wazuh/wazuh-manager` and runs 30 cases
+through the live `logtest` engine — every rule tier plus false-positive guards
+(e.g. `rsync -e ssh` and `ssh -i` must *not* be mistaken for reverse shells)
+and a check that PHP and Node activity don't cross-correlate. See
+[tests/README.md](tests/README.md).
+
+## Lab
+
+[lab/](lab/) builds an end-to-end environment: a vulnerable PHP app and Node
+app behind nginx, with the agent wired to your manager.
+
+```bash
+# On a throwaway Ubuntu 22.04/24.04 VM — never expose it to an untrusted network
+sudo WAZUH_MANAGER=<manager-ip> lab/setup-victim.sh
+
+# From the attacker box (or the victim), fire benign triggers for each rule
+lab/validate.sh http://<victim-ip>
+```
+
+`validate.sh` uses only benign, loopback-scoped commands (discovery, a
+localhost fetch, a base64 decode, a `.php` upload). The reverse-shell tiers
+(`100530`/`100531`) are validated reproducibly by the logtest suite rather than
+fired live.
+
+## Tuning
+
+Expect to tune layer 1 rule `100510` (shell spawn, level 8) first, since some
+apps legitimately shell out — ImageMagick, `git`, mail. Silence a known-good
+command with a level-0 child rule:
+
+```xml
+<rule id="100599" level="0">
+  <if_sid>100510</if_sid>
+  <field name="audit.exe" type="pcre2">/usr/bin/convert$</field>
+  <description>Web-to-shell: known-good ImageMagick call (ignored)</description>
+</rule>
+```
+
+Rule `100522` flags the PHP CLI as a web-spawned interpreter; drop `php` from
+its regex if your app legitimately calls `php` as a subprocess.
+
+## Files
+
+```
+auditd/60-web-to-shell.rules   execve audit rules (edit account names)
+wazuh/web_to_shell_rules.xml   detection rules (manager)
+wazuh/agent_ossec.conf         agent config: audit log, access log, FIM
+tests/                         logtest validation suite + Docker runner
+lab/                           vulnerable apps, victim setup, trigger script
+```
+
+## Compatibility
+
+Validated on Wazuh 4.14.8. Uses only stock decoders (auditd, web-accesslog,
+syscheck), so it should work across the 4.x line.
