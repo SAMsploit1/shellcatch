@@ -16,7 +16,8 @@ it out of the box. This post walks through a three-layer detection that fills
 the gap, and, just as importantly, how I validated it against a real Wazuh
 manager so you can trust it before it ever sees production traffic.
 
-The full ruleset, lab, and test suite are on GitHub: [link].
+The full ruleset, lab, and test suite are on GitHub:
+https://github.com/SAMsploit1/shellcatch
 
 ## The core idea: the service account is the signal
 
@@ -123,7 +124,7 @@ that lights up each rule using only loopback-scoped commands. Stand it up on a
 throwaway VM, point the agent at your manager, and watch
 `rule.groups:web_to_shell` populate.
 
-- Ruleset, lab, and tests: [link]
+- Ruleset, lab, and tests: https://github.com/SAMsploit1/shellcatch
 - Validated on Wazuh 4.14.8; stock decoders only, so it should hold across 4.x.
 
 If you run a web stack on Wazuh, this is a high-value, low-noise detection to

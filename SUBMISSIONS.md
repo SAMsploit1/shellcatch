@@ -2,6 +2,8 @@
 
 Running record of contributions for the Wazuh Ambassador program.
 
+Repo: https://github.com/SAMsploit1/shellcatch
+
 | Date | Type | Title | Link / location | Status |
 |------|------|-------|-----------------|--------|
 | 2026-10-24 | Detection content | Web-to-shell detection (PHP & Node.js) | [detections/web-to-shell](detections/web-to-shell) | Draft — ready to publish |
