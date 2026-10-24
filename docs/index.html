@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catching the moment a web app becomes a shell — web-to-shell detection in Wazuh</title>
+<meta name="description" content="A validated three-layer Wazuh detection for web runtimes (PHP &amp; Node.js) spawning processes: webshells, command injection, and RCE. By Vigan Bytyqi, Wazuh Ambassador.">
+<meta property="og:title" content="Catching the moment a web app becomes a shell">
+<meta property="og:description" content="A validated three-layer Wazuh detection for PHP &amp; Node.js web-to-shell — webshells, command injection, RCE.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="assets/1-threat-hunting-dashboard.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1a1a1a; --soft:#5c6670; --faint:#8a939c; --line:#e6e9ec;
+    --bg:#ffffff; --accent:#1a73c7; --accent-ink:#0f4c81;
+    --code-bg:#f5f7f9; --tag:#eef4fb; --maxw:720px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e8edf2; --soft:#aab4bf; --faint:#7d8792; --line:#243244;
+      --bg:#0e1621; --accent:#5aa9e6; --accent-ink:#8fc6f0;
+      --code-bg:#15202e; --tag:#17283a;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e8edf2; --soft:#aab4bf; --faint:#7d8792; --line:#243244;
+    --bg:#0e1621; --accent:#5aa9e6; --accent-ink:#8fc6f0;
+    --code-bg:#15202e; --tag:#17283a;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Source Serif 4",Georgia,"Times New Roman",serif;
+    font-size:20px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .sans{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  /* top bar */
+  header.bar{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:saturate(1.3) blur(8px);border-bottom:1px solid var(--line)}
+  .bar-in{max-width:var(--maxw);margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:12px;
+    font-family:Inter,sans-serif;font-size:14px}
+  .brand{font-weight:700;letter-spacing:-.01em}
+  .brand .dot{color:var(--accent)}
+  .bar .spacer{flex:1}
+  .ghbtn{font-family:Inter,sans-serif;font-weight:600;font-size:13px;text-decoration:none;
+    color:#fff;background:var(--accent);padding:7px 14px;border-radius:999px;white-space:nowrap}
+  .ghbtn:hover{background:var(--accent-ink)}
+  /* article */
+  main{max-width:var(--maxw);margin:0 auto;padding:0 20px 96px}
+  .kicker{font-family:Inter,sans-serif;font-weight:600;font-size:13px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--accent);margin:48px 0 14px}
+  h1{font-family:Inter,sans-serif;font-weight:700;font-size:42px;line-height:1.15;
+    letter-spacing:-.022em;margin:0 0 18px}
+  .dek{color:var(--soft);font-size:22px;line-height:1.5;margin:0 0 28px}
+  .byline{display:flex;align-items:center;gap:12px;font-family:Inter,sans-serif;
+    padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:8px}
+  .avatar{width:44px;height:44px;border-radius:50%;flex:none;
+    background:linear-gradient(135deg,var(--accent),#7d4cc7);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+  .byline .who{font-weight:600;font-size:15px;line-height:1.3}
+  .byline .meta{color:var(--faint);font-size:13.5px}
+  figure{margin:34px -40px}
+  @media (max-width:820px){figure{margin:28px 0}}
+  figure img{width:100%;height:auto;display:block;border-radius:10px;border:1px solid var(--line)}
+  figcaption{font-family:Inter,sans-serif;color:var(--faint);font-size:13.5px;text-align:center;margin-top:10px}
+  h2{font-family:Inter,sans-serif;font-weight:700;font-size:28px;letter-spacing:-.018em;
+    line-height:1.25;margin:48px 0 10px}
+  p{margin:0 0 22px}
+  a{color:var(--accent-ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+  strong{font-weight:700}
+  ul,ol{margin:0 0 22px;padding-left:1.3em}
+  li{margin:0 0 10px}
+  code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:.82em;background:var(--code-bg);padding:.12em .4em;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;overflow:auto;margin:0 0 24px}
+  pre code{background:none;padding:0;font-size:14px;line-height:1.6}
+  table{width:100%;border-collapse:collapse;font-family:Inter,sans-serif;font-size:15px;margin:0 0 26px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{font-weight:600;color:var(--soft);font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  td code{font-size:13px}
+  .pill{display:inline-block;min-width:24px;text-align:center;padding:1px 9px;border-radius:999px;
+    color:#fff;font-weight:700;font-size:13px}
+  .cta{font-family:Inter,sans-serif;margin:40px 0 0;padding:26px;border:1px solid var(--line);
+    border-radius:14px;background:var(--tag)}
+  .cta h3{margin:0 0 6px;font-size:19px;font-weight:700}
+  .cta p{font-size:15px;color:var(--soft);margin:0 0 16px;font-family:Inter,sans-serif}
+  .cta a.ghbtn{display:inline-block}
+  footer{max-width:var(--maxw);margin:0 auto;padding:28px 20px 60px;border-top:1px solid var(--line);
+    font-family:Inter,sans-serif;font-size:13.5px;color:var(--faint)}
+  footer a{color:var(--soft)}
+  .note{font-family:Inter,sans-serif;font-size:15px;color:var(--soft);border-left:3px solid var(--accent);
+    padding:2px 0 2px 16px;margin:0 0 24px}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <span class="brand">shell<span class="dot">catch</span></span>
+    <span class="spacer"></span>
+    <a class="ghbtn" href="https://github.com/SAMsploit1/shellcatch">View on GitHub ↗</a>
+  </div>
+</header>
+
+<main>
+  <div class="kicker">Detection Engineering · Wazuh</div>
+  <h1>Catching the moment a web app becomes a shell</h1>
+  <p class="dek">A validated three-layer Wazuh detection for PHP &amp; Node.js — webshells, command injection, and the RCE class that keeps making headlines.</p>
+
+  <div class="byline">
+    <div class="avatar">VB</div>
+    <div>
+      <div class="who">Vigan Bytyqi</div>
+      <div class="meta">Wazuh Ambassador · 6 min read</div>
+    </div>
+  </div>
+
+  <figure>
+    <img src="assets/1-threat-hunting-dashboard.png" alt="Wazuh Threat Hunting dashboard showing 17 web-to-shell alerts and the MITRE ATT&CK breakdown">
+    <figcaption>The detection live in Wazuh Threat Hunting — 17 alerts, 11 at level 12+, mapped across the MITRE ATT&amp;CK chain.</figcaption>
+  </figure>
+
+  <p>Most web compromises, whatever the entry point, converge on one move: the web application starts running operating-system commands. A classic PHP webshell does it. An OS command injection in a Node.js app does it. So does the latest deserialization or server-side RCE — including the React/Next.js &ldquo;React2Shell&rdquo; class of bugs that made the rounds recently. The vulnerability of the week changes; the thing it does next rarely does.</p>
+
+  <p>That gives defenders a durable chokepoint. A PHP-FPM worker or a Node.js server almost never has a legitimate reason to run <code>id</code>, <code>curl</code>, or <code>/bin/sh</code>. When it does, something is wrong. Wazuh is well placed to see it — but ships no rule for it out of the box. This post walks through a three-layer detection that fills the gap, and, just as importantly, how I validated it against a real Wazuh manager so you can trust it before it ever sees production traffic.</p>
+
+  <h2>The core idea: the service account is the signal</h2>
+  <p>The cleanest signal is process lineage — &ldquo;php-fpm spawned bash.&rdquo; The catch is that Linux&rsquo;s audit subsystem (<code>auditd</code>), which is where this event is richest, records the <em>user</em> that called <code>execve()</code>, not the parent process name. So rather than fight for parent-child data, the detection keys on the <strong>account</strong> the runtime runs as, and treats it as a proxy for &ldquo;this came from the web app.&rdquo;</p>
+  <p>That works cleanly as long as each runtime has its own identity:</p>
+  <ul>
+    <li>PHP-FPM and Apache already run as <code>www-data</code> (or <code>apache</code>/<code>nginx</code>). Good.</li>
+    <li>Node.js, by convention, often runs as root or a developer&rsquo;s login user. That ruins the signal. <strong>Run your Node app under a dedicated service account.</strong> It is good hygiene regardless, and it is what makes this detection precise.</li>
+  </ul>
+  <p>With that in place, the audit rule is tiny — log every <code>execve</code> by the web accounts:</p>
+  <pre><code>-a always,exit -F arch=b64 -S execve -F euid=www-data -k web_exec_php
+-a always,exit -F arch=b64 -S execve -F euid=nodeapp  -k web_exec_node</code></pre>
+
+  <h2>Three layers</h2>
+  <p>Process execution is the heart of it, but two more layers add context and catch the attack earlier or later in its lifecycle.</p>
+  <p><strong>Layer 1 — process execution (auditd).</strong> The tiered rules escalate with intent:</p>
+  <table>
+    <thead><tr><th>Behaviour</th><th>Example</th><th>Level</th></tr></thead>
+    <tbody>
+      <tr><td>Shell spawned</td><td><code>sh -c '…'</code></td><td><span class="pill" style="background:#4d89c9">8</span></td></tr>
+      <tr><td>Discovery</td><td><code>id</code>, <code>whoami</code>, <code>uname</code></td><td><span class="pill" style="background:#e8743b">12</span></td></tr>
+      <tr><td>Download / transfer</td><td><code>curl</code>, <code>wget</code>, <code>scp</code></td><td><span class="pill" style="background:#e8743b">12</span></td></tr>
+      <tr><td>Interpreter</td><td><code>python -c</code>, <code>perl -e</code></td><td><span class="pill" style="background:#d9a62e">10</span></td></tr>
+      <tr><td>Reverse shell</td><td><code>/dev/tcp</code>, <code>mkfifo</code>, <code>nc -e</code></td><td><span class="pill" style="background:#d32029">15</span></td></tr>
+    </tbody>
+  </table>
+  <p>And a correlation rule: three post-exploitation commands from the <em>same</em> web account within two minutes is almost certainly someone typing into a webshell — that escalates to level 14 on its own.</p>
+  <p><strong>Layer 2 — web access logs.</strong> Before the shell ever spawns, the request often carries the payload: <code>?page=system('id')</code>, <code>/bin/sh</code> in a parameter, <code>require('child_process')</code> in a query string, or a hit on a freshly uploaded <code>.php</code> in an <code>uploads/</code> directory. These fire off the stock web-accesslog decoder.</p>
+  <p><strong>Layer 3 — file integrity monitoring.</strong> The webshell has to land somewhere. Real-time FIM on the webroot flags new <code>.php</code>/<code>.phtml</code>/<code>.phar</code> files, new <code>.js</code> in the Node app directory, and tampering with <code>.htaccess</code> or <code>.user.ini</code> (a common trick to make PHP execute innocuous-looking file types).</p>
+  <p>Everything is mapped to MITRE ATT&amp;CK — T1505.003 (Web Shell), T1059.004 (Unix Shell), T1190 (Exploit Public-Facing Application), and friends.</p>
+
+  <figure>
+    <img src="assets/2-threat-hunting-events.png" alt="Wazuh events list showing every web-to-shell rule firing across all three layers">
+    <figcaption>Every layer in one view — FIM drops, web-request payloads, the interactive-webshell correlation (100550), and a netcat reverse shell (100531, level 15).</figcaption>
+  </figure>
+
+  <h2>The part most rule packs skip: proving it works</h2>
+  <p>It is easy to write XML that <em>looks</em> like a detection. It is harder to know it fires on what you intend and stays quiet on what you don&rsquo;t. I built the ruleset against a throwaway <code>wazuh/wazuh-manager</code> container and drove 30 cases through the live <code>logtest</code> engine — the real analysis pipeline, not a mock.</p>
+  <p>Two things only surfaced because of that.</p>
+  <p><strong>auditd hex-encoding.</strong> auditd writes a command argument as a quoted string only when it is printable with no spaces or quotes; otherwise it writes it as uppercase hex. So a reverse shell like <code>sh -c "bash -i &gt;&amp; /dev/tcp/…"</code> arrives on the wire as <code>a2=62617368202D69…</code>. A rule matching the plaintext <code>/dev/tcp</code> would miss the real event entirely. The generator in the test suite encodes arguments exactly as the daemon does, which forced the rules to match both forms — and caught the bug before deployment, not after.</p>
+  <p><strong>Two silent footguns in Wazuh itself:</strong></p>
+  <ol>
+    <li><em>Stock rules get there first.</em> Wazuh&rsquo;s built-in <code>0850-audit_rules.xml</code> already claims <code>python</code>, <code>scp</code>, <code>ps aux</code>, and <code>lscpu</code> audit events. My rules were being shadowed until I chained them off those stock IDs via <code>if_sid</code>.</li>
+    <li><em>FIM <code>restrict</code> and escaped dots.</em> On 4.14.8, a <code>restrict</code> pattern written the &ldquo;correct&rdquo; regex way — <code>\.php$</code> — silently matches <strong>nothing</strong>, quietly disabling the whole FIM layer. Written unescaped — <code>.php$</code> — it works. If I had shipped the intuitive version, layer 3 would have been dead on arrival for anyone who copied it.</li>
+  </ol>
+  <p>Neither is in the docs in a way that would have saved me. Both are now comments in the shipped files. That is the difference between a rule pack you hope works and one you have watched work.</p>
+
+  <figure>
+    <img src="assets/3-alert-detail-fields.png" alt="Expanded Wazuh alert documents showing rule.mitre, decoder.name, and syscheck fields">
+    <figcaption>Real alerts, fully enriched — <code>rule.mitre.id</code>, <code>rule.mitre.tactic</code>, <code>decoder.name</code>, and the syscheck <code>sha256</code> of each dropped webshell.</figcaption>
+  </figure>
+
+  <p>The false-positive guards matter too. <code>rsync -e ssh</code> contains <code>-e</code>; <code>ssh -i</code> contains <code>-i</code>. Neither is a reverse shell, and the tests assert they classify as an ordinary shell spawn, not a critical alert. PHP activity and Node activity are also checked never to cross-correlate into a false webshell alert.</p>
+  <p>Final result: <strong>30/30</strong>, reproducible with one command (<code>./tests/run.sh</code>), against a clean container, in about a minute.</p>
+
+  <h2>Try it</h2>
+  <p>The repo includes a self-contained lab — a deliberately vulnerable PHP app and Node app behind nginx, a one-command victim setup, and a benign trigger script that lights up each rule using only loopback-scoped commands. Stand it up on a throwaway VM, point the agent at your manager, and watch <code>rule.groups:web_to_shell</code> populate.</p>
+  <p class="note">Validated on Wazuh 4.14.8; stock decoders only, so it should hold across the 4.x line.</p>
+  <p>If you run a web stack on Wazuh, this is a high-value, low-noise detection to add today — and a template for the broader principle: find the behaviour the attacker can&rsquo;t avoid, key on it, and prove your rule before you trust it.</p>
+
+  <div class="cta">
+    <h3 class="sans">Get the code</h3>
+    <p>Ruleset, auditd rules, agent config, the Docker lab, the 30-case test suite, and a step-by-step install guide — all open source.</p>
+    <a class="ghbtn" href="https://github.com/SAMsploit1/shellcatch">github.com/SAMsploit1/shellcatch ↗</a>
+  </div>
+</main>
+
+<footer>
+  <p>Written by <strong>Vigan Bytyqi</strong>, Wazuh Ambassador · part of the
+  <a href="https://github.com/SAMsploit1/shellcatch">shellcatch</a> detection collection.
+  Wazuh and the Wazuh logo are trademarks of Wazuh Inc.; this is an independent community project.</p>
+</footer>
+</body>
+</html>
