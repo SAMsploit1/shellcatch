@@ -7,7 +7,9 @@
 #
 #   sudo WAZUH_MANAGER=192.168.56.10 ./setup-victim.sh
 #
-# Never run this on a machine reachable from an untrusted network.
+# WARNING: the apps are exploitable by design. Run this only on a throwaway VM
+# in an isolated network: never internet-facing, and never enrolled on a Wazuh
+# manager that also serves production agents.
 set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }

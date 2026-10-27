@@ -1,7 +1,8 @@
 # Deploying the web-to-shell detection
 
 Step-by-step install for a production Wazuh deployment. For a disposable test
-environment, use [the lab](lab/) instead; to validate the rules without any
+environment, use [the lab](lab/) instead (isolated network only, never on a
+manager that serves production agents); to validate the rules without any
 agent, use [the test suite](tests/).
 
 The detection has two sides: **agent** (collects the data) and **manager**
@@ -90,7 +91,9 @@ You should see rule `100520` within a few seconds. See the
 ## 4. Tune (expected, not optional)
 
 The one rule that needs attention first is **`100510`** (shell spawned,
-level 8), because some apps legitimately shell out (ImageMagick, `git`, mail).
+level 8), because some apps legitimately shell out: ImageMagick, wkhtmltopdf,
+git deploy hooks, Composer. PHP `mail()` → sendmail is already handled by rule
+`100511` (level 3). See the README's Tuning section for the full list.
 Silence a known-good command with a level-0 child rule in your local rules:
 
 ```xml

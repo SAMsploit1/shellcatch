@@ -9,6 +9,7 @@ Site: https://samsploit1.github.io/shellcatch/
 |------|------|-------|-----------------|--------|
 | 2026-10-24 | Detection content | Web-to-shell detection (PHP & Node.js) | [detections/web-to-shell](detections/web-to-shell) | Published — rules, lab, tests, INSTALL, live dashboard screenshots |
 | 2026-10-24 | Write-up / site | Catching the moment a web app becomes a shell | [site](https://samsploit1.github.io/shellcatch/) · [source](content/blog-web-to-shell.md) | Published on GitHub Pages — republish on dev.to/Medium optional |
+| 2026-10-27 | Revision | Ambassador review feedback addressed (9 points) | [details](#review-feedback--2026-10-27) | Committed locally — not yet pushed; PR #122 not yet synced |
 | 2026-10-24 | Upstream PR | Web-to-shell integration for `wazuh/integrations` | [PR #122](https://github.com/wazuh/integrations/pull/122) | Open — awaiting review |
 
 ---
@@ -27,20 +28,20 @@ spawning processes — the common endpoint of webshells, OS command injection, a
 RCE such as the React2Shell class. It combines three detection layers (auditd
 process execution, web-access-log payloads, and real-time FIM for webshell
 drops), all mapped to MITRE ATT&CK. Ships with a self-contained vulnerable lab, a
-30-case test suite validated against a live `wazuh-manager` logtest engine, a
+42-case test suite (30 at first publish) validated against a live `wazuh-manager` logtest engine, a
 step-by-step install guide, and a Medium-style write-up.
 
 **Description (one-liner):**
 A validated three-layer Wazuh detection for web-to-shell attacks (PHP & Node.js)
-— webshells, command injection, and RCE — with a Docker lab, a 30-case test
+— webshells, command injection, and RCE — with a Docker lab, a 42-case test
 suite, and a published write-up.
 
 **What's included:** `web_to_shell_rules.xml` (IDs 100500–100599), auditd rules,
-agent `ossec.conf` snippet, Docker lab (vulnerable PHP + Node apps), 30-case
+agent `ossec.conf` snippet, Docker lab (vulnerable PHP + Node apps), 42-case
 logtest suite + Docker runner, INSTALL.md, live dashboard screenshots, blog post,
 GitHub Pages site.
 
-**Evidence:** 30/30 logtest cases pass on a clean container; FIM verified live;
+**Evidence:** 42/42 logtest cases pass (30/30 at first publish) on a clean container; FIM verified live;
 17 real alerts across all three layers shown in the Threat Hunting dashboard.
 
 ## Contribution 2 — Upstream PR to `wazuh/integrations`
@@ -69,6 +70,34 @@ dashboards.
 **Not included:** the vulnerable lab apps (deliberately exploitable code in the
 Wazuh org's repo seemed unwelcome) — linked from Sources instead. A screenshot
 of the new dashboard is ready but not committed.
+
+## Review feedback — 2026-10-27
+
+Ambassador reviewer's change requests on contribution 1, and what changed:
+
+1. **auditd lineage wording.** Now says SYSCALL carries `ppid`/`pid`/`comm`/`exe`
+   but not the parent's name, and Wazuh can't join the PID across events.
+2. **b32 + execveat.** The shipped rules already had `b32`; added `-S execveat` to
+   all four lines. Tests cover execveat and the 32-bit table. The rules were not
+   loaded on a live kernel (Docker Desktop blocks audit netlink).
+3. **FIM `restrict` claim.** Re-tested on 4.14.8 with discriminating file names.
+   `restrict` is sregex (OS_Match), not OS_Regex: `.php$` is a literal dot and
+   `\.php$` matches only a real backslash. That's documented behaviour, so no
+   GitHub issue. The article was reworded and the results table added.
+4. **"Ships no rule".** Softened; links the Jan 2023 Wazuh web-shell blog and
+   the PoC guide; lists what the pack adds.
+5. **PHP mail() + other FPs.** New rule 100511 (level 3) for the default
+   sendmail call, anchored so `;id` still alerts. Tuning section covers
+   ImageMagick, wkhtmltopdf, git hooks, Composer, cron (auid tip).
+6. **Severity ordering.** New rule 100523 (level 12) for inline interpreter code
+   (`-c`/`-e`/`-r`, incl. `node -e`). The bare-interpreter rule stays at 10, with
+   the reasoning given.
+7. **Layer 2 limits.** Documented POST-body and encoding limits. Found real
+   shadowing by stock 31104/31106 (`cmd=wget%20…` landed on 31106); the
+   layer-2 rules now chain off them too.
+8. **Lab warning.** Added to the article, README, INSTALL and setup-victim.sh.
+9. **React2Shell.** Cites CVE-2025-55182 (Dec 2025) and says the detection catches
+   post-exploitation, not the CVE. Publish/update dates added to the post.
 
 ## Pipeline / ideas
 

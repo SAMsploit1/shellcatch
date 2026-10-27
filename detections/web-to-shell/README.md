@@ -2,12 +2,18 @@
 
 Detects a web runtime — PHP-FPM, `mod_php`, or Node.js — spawning a process.
 That behaviour covers the whole post-exploitation chain for web attacks:
-webshells, OS command injection, and deserialization/RCE bugs such as the
-React/Next.js "React2Shell" class. A PHP or Node worker almost never needs to
-run `id`, `curl`, or `/bin/sh`, so when it does, it is worth an alert.
+webshells, OS command injection, and deserialization/RCE bugs such as
+React2Shell (CVE-2025-55182, React Server Components, disclosed December 2025).
+It detects what happens *after* exploitation, not the vulnerability itself. A
+PHP or Node worker rarely needs to run `id`, `curl`, or `/bin/sh`, so when it
+does, it is worth an alert.
 
-Wazuh ships no rule for this out of the box. This pack adds one, across three
-layers, all mapped to MITRE ATT&CK.
+Wazuh has published guidance on this, notably
+[Web shell attack detection with Wazuh](https://wazuh.com/blog/web-shell-attack-detection-with-wazuh/)
+(FIM + auditd for PHP/ASP.NET). The default ruleset has no ready-made rule for
+it, though. This pack builds on that guidance and adds Node.js coverage, tiered
+severity, hex-aware auditd matching, correlation, and a test suite run against a
+live `logtest` engine. It works across three layers, all mapped to MITRE ATT&CK.
 
 | Layer | Source | What it catches | Rule IDs |
 |-------|--------|-----------------|----------|
@@ -15,8 +21,10 @@ layers, all mapped to MITRE ATT&CK.
 | 2. Web requests | nginx/apache access log | command-exec payloads, webshell URLs, `cmd=` params | `100560`–`100562` |
 | 3. File integrity | Wazuh FIM | new `.php`/`.phtml`/`.phar` in webroot, new `.js` in app dir, `.htaccess`/`.user.ini` tampering | `100570`–`100572` |
 
-Severity climbs with intent: a bare shell spawn is level 8, discovery and
-downloads are 10–12, and reverse-shell patterns are 15. Three
+Severity climbs with intent: a bare shell spawn is level 8, an interpreter
+running a script file is 10, inline interpreter code (`python -c`, `perl -e`),
+discovery and downloads are 12, and reverse-shell patterns are 15. PHP `mail()`
+calling sendmail is a known-good shell spawn and logs at level 3. Three
 post-exploitation commands from the same web account inside two minutes
 escalate to level 14 as a likely interactive webshell.
 
@@ -31,9 +39,10 @@ More views (events list, alert field detail) in [screenshots/](screenshots/).
 
 ## Why the web service account is the signal
 
-auditd records the UID that called `execve`, not the parent process. So the
-detection keys on the **account** the runtime runs as, used as a proxy for
-"this came from the web app." That means:
+auditd's `SYSCALL` record carries the parent PID (`ppid`) but not the parent's
+name, and Wazuh cannot easily join that PID back to the parent process across
+events. So the detection keys on the **account** the runtime runs as, used as a
+proxy for "this came from the web app." That means:
 
 - Run PHP-FPM / Apache as `www-data` (or `apache`/`nginx`) — the default.
 - **Run Node.js under its own dedicated service account** (`nodeapp` here), not
@@ -77,7 +86,7 @@ Against a throwaway manager container (needs Docker, ~1 min):
 ./tests/run.sh
 ```
 
-This mounts the ruleset into a fresh `wazuh/wazuh-manager` and runs 30 cases
+This mounts the ruleset into a fresh `wazuh/wazuh-manager` and runs 42 cases
 through the live `logtest` engine — every rule tier plus false-positive guards
 (e.g. `rsync -e ssh` and `ssh -i` must *not* be mistaken for reverse shells)
 and a check that PHP and Node activity don't cross-correlate. See
@@ -88,8 +97,13 @@ and a check that PHP and Node activity don't cross-correlate. See
 [lab/](lab/) builds an end-to-end environment: a vulnerable PHP app and Node
 app behind nginx, with the agent wired to your manager.
 
+> **⚠️ Warning: the lab is exploitable by design** (command injection and
+> unrestricted upload). Run it only on a throwaway VM in an isolated network.
+> Never make it internet-facing, and never enrol it on a Wazuh manager that
+> also serves production agents. Use a separate lab manager.
+
 ```bash
-# On a throwaway Ubuntu 22.04/24.04 VM — never expose it to an untrusted network
+# On a throwaway Ubuntu 22.04/24.04 VM in an isolated network
 sudo WAZUH_MANAGER=<manager-ip> lab/setup-victim.sh
 
 # From the attacker box (or the victim), fire benign triggers for each rule
@@ -104,8 +118,21 @@ fired live.
 ## Tuning
 
 Expect to tune layer 1 rule `100510` (shell spawn, level 8) first, since some
-apps legitimately shell out — ImageMagick, `git`, mail. Silence a known-good
-command with a level-0 child rule:
+apps legitimately shell out:
+
+- **PHP `mail()`** runs `sendmail_path` via `/bin/sh -c`. Rule `100511` already
+  drops the default `/usr/sbin/sendmail -t -i [-f<sender>]` call to level 3;
+  edit its hex if your `sendmail_path` differs.
+- **ImageMagick / Ghostscript delegates, wkhtmltopdf** — document and image
+  processing.
+- **Git-based deploy hooks** (`git pull` from a webhook) and **Composer** run as
+  the web user.
+- **Cron-driven PHP scripts** in `www-data`'s crontab hit the interpreter rule
+  `100522`. On Debian/Ubuntu, cron sets the audit login UID (`audit.auid`) while
+  PHP-FPM workers leave it unset (`4294967295`), which makes a clean tuning
+  field.
+
+Silence a known-good command with a narrow child rule:
 
 ```xml
 <rule id="100599" level="0">
@@ -127,6 +154,15 @@ wazuh/agent_ossec.conf         agent config: audit log, access log, FIM
 tests/                         logtest validation suite + Docker runner
 lab/                           vulnerable apps, victim setup, trigger script
 ```
+
+## Layer 2 limits
+
+Access logs hold the request line only. POST bodies, where most real webshell
+traffic goes, are never logged, and a fully percent-encoded or base64 payload
+gets past plaintext patterns. Layer 2 is an early warning; layer 1 is the
+detection. The layer 2 rules also chain off stock rules `31104`/`31106`, which
+claim some of the same URLs (`wget%`, `cd%20`, `%0A`), so the more specific
+web-to-shell alert wins.
 
 ## Compatibility
 

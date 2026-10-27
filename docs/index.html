@@ -93,6 +93,10 @@
   footer a{color:var(--soft)}
   .note{font-family:Inter,sans-serif;font-size:15px;color:var(--soft);border-left:3px solid var(--accent);
     padding:2px 0 2px 16px;margin:0 0 24px}
+  .warn{font-family:Inter,sans-serif;font-size:15px;color:var(--ink);border-left:3px solid #d32029;
+    background:color-mix(in srgb,#d32029 8%,transparent);padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 24px}
+  .tw{overflow-x:auto;margin:0 0 26px}
+  .tw table{margin:0}
 </style>
 </head>
 <body>
@@ -107,13 +111,13 @@
 <main>
   <div class="kicker">Detection Engineering · Wazuh</div>
   <h1>Catching the moment a web app becomes a shell</h1>
-  <p class="dek">A validated three-layer Wazuh detection for PHP &amp; Node.js — webshells, command injection, and the RCE class that keeps making headlines.</p>
+  <p class="dek">A validated three-layer Wazuh detection for PHP &amp; Node.js — webshells, command injection, and the post-exploitation step every RCE has in common.</p>
 
   <div class="byline">
     <div class="avatar">VB</div>
     <div>
       <div class="who">Vigan Bytyqi</div>
-      <div class="meta">Wazuh Ambassador · 6 min read</div>
+      <div class="meta">Wazuh Ambassador · Published 24 Oct 2026 · Updated 27 Oct 2026 · 9 min read</div>
     </div>
   </div>
 
@@ -122,36 +126,55 @@
     <figcaption>The detection live in Wazuh Threat Hunting — 17 alerts, 11 at level 12+, mapped across the MITRE ATT&amp;CK chain.</figcaption>
   </figure>
 
-  <p>Most web compromises, whatever the entry point, converge on one move: the web application starts running operating-system commands. A classic PHP webshell does it. An OS command injection in a Node.js app does it. So does the latest deserialization or server-side RCE — including the React/Next.js &ldquo;React2Shell&rdquo; class of bugs that made the rounds recently. The vulnerability of the week changes; the thing it does next rarely does.</p>
+  <p>Most web compromises, whatever the entry point, converge on one move: the web application starts running operating-system commands. A classic PHP webshell does it. An OS command injection in a Node.js app does it. So does a deserialization or server-side RCE such as <strong>React2Shell (CVE-2025-55182)</strong>, the unauthenticated RCE in React Server Components disclosed in December 2025. To be precise about scope: this detection does not recognise that vulnerability, or any other. It catches what an attacker does <em>after</em> exploiting it, when the Node.js process starts running commands. That is the point. The vulnerability of the week changes; the thing it does next rarely does.</p>
 
-  <p>That gives defenders a durable chokepoint. A PHP-FPM worker or a Node.js server almost never has a legitimate reason to run <code>id</code>, <code>curl</code>, or <code>/bin/sh</code>. When it does, something is wrong. Wazuh is well placed to see it — but ships no rule for it out of the box. This post walks through a three-layer detection that fills the gap, and, just as importantly, how I validated it against a real Wazuh manager so you can trust it before it ever sees production traffic.</p>
+  <p>That gives defenders a durable chokepoint. A PHP-FPM worker or a Node.js server rarely has a legitimate reason to run <code>id</code>, <code>curl</code>, or <code>/bin/sh</code>. When it does, something is usually wrong.</p>
+
+  <p>Wazuh already has good material on this. The January 2023 post <a href="https://wazuh.com/blog/web-shell-attack-detection-with-wazuh/">Web shell attack detection with Wazuh</a> catches PHP and ASP.NET webshells with FIM, auditd <code>execve</code> logging for the Apache user, Sysmon on IIS, and command monitoring. The <a href="https://documentation.wazuh.com/current/proof-of-concept-guide/index.html">proof-of-concept guide</a> covers related web attacks such as Shellshock and SQL injection. That guidance is the foundation here. The default ruleset itself does not include a ready-made rule for &ldquo;a web runtime spawned a process&rdquo;. This pack packages one and adds:</p>
+  <ul>
+    <li><strong>Node.js coverage</strong> next to PHP, keyed on a dedicated service account.</li>
+    <li><strong>Tiered severity</strong> by what the spawned process does, not one flat alert.</li>
+    <li><strong>Hex-aware matching</strong> of auditd arguments (more on that below).</li>
+    <li><strong>Correlation</strong> of repeated commands into an &ldquo;interactive webshell&rdquo; alert.</li>
+    <li><strong>A test suite</strong> that runs every case through a live Wazuh <code>logtest</code> engine.</li>
+  </ul>
 
   <h2>The core idea: the service account is the signal</h2>
-  <p>The cleanest signal is process lineage — &ldquo;php-fpm spawned bash.&rdquo; The catch is that Linux&rsquo;s audit subsystem (<code>auditd</code>), which is where this event is richest, records the <em>user</em> that called <code>execve()</code>, not the parent process name. So rather than fight for parent-child data, the detection keys on the <strong>account</strong> the runtime runs as, and treats it as a proxy for &ldquo;this came from the web app.&rdquo;</p>
+  <p>The cleanest signal is process lineage — &ldquo;php-fpm spawned bash.&rdquo; Linux&rsquo;s audit subsystem (<code>auditd</code>) gets you part of the way: the <code>SYSCALL</code> record for each <code>execve()</code> carries the new process&rsquo;s <code>pid</code>, <code>comm</code> and <code>exe</code>, and its parent&rsquo;s PID (<code>ppid</code>). What it does not carry is the parent&rsquo;s <em>name</em>. To learn that <code>ppid=812</code> was <code>php-fpm</code>, you would have to join it back to an earlier event for PID 812, and Wazuh&rsquo;s rule engine cannot easily do that join across events. So the practical choice is to key on the <strong>account</strong> the runtime runs as, treating it as a proxy for &ldquo;this came from the web app.&rdquo;</p>
   <p>That works cleanly as long as each runtime has its own identity:</p>
   <ul>
     <li>PHP-FPM and Apache already run as <code>www-data</code> (or <code>apache</code>/<code>nginx</code>). Good.</li>
     <li>Node.js, by convention, often runs as root or a developer&rsquo;s login user. That ruins the signal. <strong>Run your Node app under a dedicated service account.</strong> It is good hygiene regardless, and it is what makes this detection precise.</li>
   </ul>
-  <p>With that in place, the audit rule is tiny — log every <code>execve</code> by the web accounts:</p>
-  <pre><code>-a always,exit -F arch=b64 -S execve -F euid=www-data -k web_exec_php
--a always,exit -F arch=b64 -S execve -F euid=nodeapp  -k web_exec_node</code></pre>
+  <p>With that in place, the audit rules are short. They log every program execution by the web accounts, on both syscall tables and both entry points, so an attacker can&rsquo;t slip past by calling the 32-bit table or <code>execveat</code> instead of <code>execve</code>:</p>
+  <pre><code>-a always,exit -F arch=b64 -S execve -S execveat -F euid=www-data -k web_exec_php
+-a always,exit -F arch=b32 -S execve -S execveat -F euid=www-data -k web_exec_php
+-a always,exit -F arch=b64 -S execve -S execveat -F euid=nodeapp  -k web_exec_node
+-a always,exit -F arch=b32 -S execve -S execveat -F euid=nodeapp  -k web_exec_node</code></pre>
 
   <h2>Three layers</h2>
   <p>Process execution is the heart of it, but two more layers add context and catch the attack earlier or later in its lifecycle.</p>
   <p><strong>Layer 1 — process execution (auditd).</strong> The tiered rules escalate with intent:</p>
-  <table>
+  <div class="tw"><table>
     <thead><tr><th>Behaviour</th><th>Example</th><th>Level</th></tr></thead>
     <tbody>
+      <tr><td>Known-good shell spawn</td><td>PHP <code>mail()</code> → <code>sendmail -t -i</code></td><td><span class="pill" style="background:#8a939c">3</span></td></tr>
       <tr><td>Shell spawned</td><td><code>sh -c '…'</code></td><td><span class="pill" style="background:#4d89c9">8</span></td></tr>
+      <tr><td>Interpreter running a script</td><td><code>php cron.php</code>, <code>python3 job.py</code></td><td><span class="pill" style="background:#d9a62e">10</span></td></tr>
+      <tr><td>Inline interpreter code</td><td><code>python -c</code>, <code>perl -e</code>, <code>php -r</code>, <code>node -e</code></td><td><span class="pill" style="background:#e8743b">12</span></td></tr>
       <tr><td>Discovery</td><td><code>id</code>, <code>whoami</code>, <code>uname</code></td><td><span class="pill" style="background:#e8743b">12</span></td></tr>
       <tr><td>Download / transfer</td><td><code>curl</code>, <code>wget</code>, <code>scp</code></td><td><span class="pill" style="background:#e8743b">12</span></td></tr>
-      <tr><td>Interpreter</td><td><code>python -c</code>, <code>perl -e</code></td><td><span class="pill" style="background:#d9a62e">10</span></td></tr>
       <tr><td>Reverse shell</td><td><code>/dev/tcp</code>, <code>mkfifo</code>, <code>nc -e</code></td><td><span class="pill" style="background:#d32029">15</span></td></tr>
     </tbody>
-  </table>
+  </table></div>
+  <p>Interpreters are split in two on purpose. Inline code (<code>python -c</code>, <code>perl -e</code>) is how an attacker runs a payload without dropping a file, so it ranks with discovery and downloads at 12. An interpreter running a script <em>file</em> is level 10. That rule matches on the binary alone, and the binary alone also covers plenty of legitimate work: PHP CLI scripts, <code>php artisan</code>, cron jobs.</p>
   <p>And a correlation rule: three post-exploitation commands from the <em>same</em> web account within two minutes is almost certainly someone typing into a webshell — that escalates to level 14 on its own.</p>
-  <p><strong>Layer 2 — web access logs.</strong> Before the shell ever spawns, the request often carries the payload: <code>?page=system('id')</code>, <code>/bin/sh</code> in a parameter, <code>require('child_process')</code> in a query string, or a hit on a freshly uploaded <code>.php</code> in an <code>uploads/</code> directory. These fire off the stock web-accesslog decoder.</p>
+  <p><strong>Layer 2 — web access logs.</strong> Before the shell ever spawns, the request often carries the payload: <code>?page=system('id')</code>, <code>/bin/sh</code> in a parameter, <code>require('child_process')</code> in a query string, or a hit on a freshly uploaded <code>.php</code> in an <code>uploads/</code> directory. These fire off the stock web-accesslog decoder. Treat this layer as an early-warning bonus, not as coverage, because it has two hard limits:</p>
+  <ul>
+    <li><strong>Access logs record only the request line.</strong> nginx and Apache do not log POST bodies, and most real webshell traffic is a POST. A <code>POST /uploads/x.php</code> with the command in the body shows up only as a request to a PHP file in an upload directory. Layer 1 still sees the command when it runs.</li>
+    <li><strong>Payloads are usually encoded.</strong> The rules match the common URL-encoded forms (<code>system%28</code>, <code>%2Fbin%2Fsh</code>, double-encoded <code>%2528</code>), but a fully percent-encoded or base64 payload will get past any plaintext pattern.</li>
+  </ul>
+  <p>These rules also overlap with Wazuh&rsquo;s stock web-attack rules in the 31100 range. Stock rule 31104 already flags URLs containing <code>wget%</code>, <code>cd%20</code>, <code>exec%20</code>, <code>%0A</code> and similar, and 31106 escalates those when the response is a 200. The pack chains off 31104 and 31106 as well as 31100 and 31108, so a request both rule sets match is raised to the more specific web-to-shell alert instead of being claimed by the stock rule. The test suite has a case that fails without this.</p>
   <p><strong>Layer 3 — file integrity monitoring.</strong> The webshell has to land somewhere. Real-time FIM on the webroot flags new <code>.php</code>/<code>.phtml</code>/<code>.phar</code> files, new <code>.js</code> in the Node app directory, and tampering with <code>.htaccess</code> or <code>.user.ini</code> (a common trick to make PHP execute innocuous-looking file types).</p>
   <p>Everything is mapped to MITRE ATT&amp;CK — T1505.003 (Web Shell), T1059.004 (Unix Shell), T1190 (Exploit Public-Facing Application), and friends.</p>
 
@@ -160,33 +183,51 @@
     <figcaption>Every layer in one view — FIM drops, web-request payloads, the interactive-webshell correlation (100550), and a netcat reverse shell (100531, level 15).</figcaption>
   </figure>
 
+  <h2>Legitimate shell spawns: tune before you trust the level-8 rule</h2>
+  <p>&ldquo;A web runtime almost never runs a shell&rdquo; holds for many apps, but not all of them. Known legitimate cases:</p>
+  <ul>
+    <li><strong>PHP <code>mail()</code>.</strong> PHP sends mail by running <code>sendmail_path</code> through <code>/bin/sh -c</code>, so every contact form, password reset, and WordPress notification spawns a shell. That alone would make the level-8 rule noisy on any CMS, so the pack ships rule 100511. It drops the default <code>/usr/sbin/sendmail -t -i</code> call, with or without a <code>-f&lt;sender&gt;</code>, to level 3. The match covers the whole argument, so <code>sendmail -t -i;id</code> still alerts.</li>
+    <li><strong>Image and document processing.</strong> ImageMagick delegates (such as Ghostscript for PDFs) and wkhtmltopdf run as child processes.</li>
+    <li><strong>Git-based deploy hooks.</strong> A webhook endpoint that runs <code>git pull</code> spawns <code>sh</code>, <code>git</code> and <code>ssh</code>.</li>
+    <li><strong>Composer</strong>, when it runs as the web user.</li>
+    <li><strong>Cron-driven PHP scripts</strong> scheduled in the web user&rsquo;s crontab. Those run as <code>www-data</code> too, so they trigger the interpreter rule. On Debian and Ubuntu, cron sets the audit login UID (<code>auid</code>) and PHP-FPM workers have it unset (<code>4294967295</code>). That difference is a good field to tune on.</li>
+  </ul>
+  <p>Silence each one with a narrow child rule of 100510 that matches the exact binary or argument. Don&rsquo;t widen the parent rule. The README has a template.</p>
+
   <h2>The part most rule packs skip: proving it works</h2>
-  <p>It is easy to write XML that <em>looks</em> like a detection. It is harder to know it fires on what you intend and stays quiet on what you don&rsquo;t. I built the ruleset against a throwaway <code>wazuh/wazuh-manager</code> container and drove 30 cases through the live <code>logtest</code> engine — the real analysis pipeline, not a mock.</p>
-  <p>Two things only surfaced because of that.</p>
+  <p>It is easy to write XML that <em>looks</em> like a detection. It is harder to know it fires on what you intend and stays quiet on what you don&rsquo;t. I built the ruleset against a throwaway <code>wazuh/wazuh-manager</code> container and drove 42 cases through the live <code>logtest</code> engine — the real analysis pipeline, not a mock.</p>
+  <p>Three things only surfaced because of that.</p>
   <p><strong>auditd hex-encoding.</strong> auditd writes a command argument as a quoted string only when it is printable with no spaces or quotes; otherwise it writes it as uppercase hex. So a reverse shell like <code>sh -c "bash -i &gt;&amp; /dev/tcp/…"</code> arrives on the wire as <code>a2=62617368202D69…</code>. A rule matching the plaintext <code>/dev/tcp</code> would miss the real event entirely. The generator in the test suite encodes arguments exactly as the daemon does, which forced the rules to match both forms — and caught the bug before deployment, not after.</p>
-  <p><strong>Two silent footguns in Wazuh itself:</strong></p>
-  <ol>
-    <li><em>Stock rules get there first.</em> Wazuh&rsquo;s built-in <code>0850-audit_rules.xml</code> already claims <code>python</code>, <code>scp</code>, <code>ps aux</code>, and <code>lscpu</code> audit events. My rules were being shadowed until I chained them off those stock IDs via <code>if_sid</code>.</li>
-    <li><em>FIM <code>restrict</code> and escaped dots.</em> On 4.14.8, a <code>restrict</code> pattern written the &ldquo;correct&rdquo; regex way — <code>\.php$</code> — silently matches <strong>nothing</strong>, quietly disabling the whole FIM layer. Written unescaped — <code>.php$</code> — it works. If I had shipped the intuitive version, layer 3 would have been dead on arrival for anyone who copied it.</li>
-  </ol>
-  <p>Neither is in the docs in a way that would have saved me. Both are now comments in the shipped files. That is the difference between a rule pack you hope works and one you have watched work.</p>
+  <p><strong>Stock rules get there first.</strong> Wazuh&rsquo;s built-in <code>0850-audit_rules.xml</code> already claims <code>python</code>, <code>scp</code>, <code>ps aux</code>, and <code>lscpu</code> audit events. The stock web rules 31104 and 31106 do the same for some access-log payloads. My rules were shadowed in both places until I chained them off those stock IDs via <code>if_sid</code>.</p>
+  <p><strong>FIM <code>restrict</code> is not a regular expression.</strong> Wazuh has more than one pattern syntax. Rules and decoders use OS_Regex by default, where a plain <code>.</code> is a literal dot and <code>\.</code> means <em>any character</em>. PCRE2 is available with <code>type="pcre2"</code>. The syscheck <code>restrict</code> attribute uses neither: the <a href="https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/syscheck.html">syscheck reference</a> lists it as <strong>sregex</strong> (<code>OS_Match</code>), a simple matcher with <code>^</code>, <code>$</code> and <code>|</code> anchors and no escapes at all. I checked this on a 4.14.8 manager by dropping the same four files into three monitored directories:</p>
+  <div class="tw"><table>
+    <thead><tr><th><code>restrict</code></th><th><code>shell.php</code></th><th><code>shellXphp</code></th><th>file named <code>x\.php</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>.php$</code></td><td>alert</td><td>—</td><td>alert</td></tr>
+      <tr><td><code>\.php$</code></td><td>—</td><td>—</td><td>alert</td></tr>
+      <tr><td><em>(none)</em></td><td>alert</td><td>alert</td><td>alert</td></tr>
+    </tbody>
+  </table></div>
+  <p><code>.php$</code> matches a literal dot, and <code>\.php$</code> looks for a real backslash in the file name. So writing the regex-style <code>\.php$</code> quietly turns off the FIM layer for normal files. That is documented behaviour, not a bug, but it is easy to miss when the neighbouring rule files use different syntaxes. The shipped config uses the documented form and says why in a comment.</p>
 
   <figure>
     <img src="assets/3-alert-detail-fields.png" alt="Expanded Wazuh alert documents showing rule.mitre, decoder.name, and syscheck fields">
     <figcaption>Real alerts, fully enriched — <code>rule.mitre.id</code>, <code>rule.mitre.tactic</code>, <code>decoder.name</code>, and the syscheck <code>sha256</code> of each dropped webshell.</figcaption>
   </figure>
 
-  <p>The false-positive guards matter too. <code>rsync -e ssh</code> contains <code>-e</code>; <code>ssh -i</code> contains <code>-i</code>. Neither is a reverse shell, and the tests assert they classify as an ordinary shell spawn, not a critical alert. PHP activity and Node activity are also checked never to cross-correlate into a false webshell alert.</p>
-  <p>Final result: <strong>30/30</strong>, reproducible with one command (<code>./tests/run.sh</code>), against a clean container, in about a minute.</p>
+  <p>The false-positive guards matter too. <code>rsync -e ssh</code> contains <code>-e</code>; <code>ssh -i</code> contains <code>-i</code>. Neither is a reverse shell, and the tests assert they classify as an ordinary shell spawn, not a critical alert. PHP activity and Node activity are also checked never to cross-correlate into a false webshell alert, and a <code>sendmail</code> call with a command tacked on must not be mistaken for the known-good <code>mail()</code> call.</p>
+  <p>Final result: <strong>42/42</strong>, reproducible with one command (<code>./tests/run.sh</code>), against a clean container, in about a minute.</p>
 
   <h2>Try it</h2>
-  <p>The repo includes a self-contained lab — a deliberately vulnerable PHP app and Node app behind nginx, a one-command victim setup, and a benign trigger script that lights up each rule using only loopback-scoped commands. Stand it up on a throwaway VM, point the agent at your manager, and watch <code>rule.groups:web_to_shell</code> populate.</p>
+  <p>The repo includes a self-contained lab — a deliberately vulnerable PHP app and Node app behind nginx, a one-command victim setup, and a benign trigger script that lights up each rule using only loopback-scoped commands.</p>
+  <p class="warn"><strong>⚠️ Warning: the lab is exploitable by design.</strong> It ships working command injection and unrestricted file upload. Run it only on a throwaway VM in an isolated network (host-only or a dedicated lab VLAN). Never make it internet-facing, and never enrol it on a Wazuh manager that also serves production agents. Use a separate lab manager, so lab alerts and anything the victim gets up to stay out of your real environment.</p>
+  <p>Stand it up that way, point the agent at your lab manager, and watch <code>rule.groups:web_to_shell</code> populate.</p>
   <p class="note">Validated on Wazuh 4.14.8; stock decoders only, so it should hold across the 4.x line.</p>
-  <p>If you run a web stack on Wazuh, this is a high-value, low-noise detection to add today — and a template for the broader principle: find the behaviour the attacker can&rsquo;t avoid, key on it, and prove your rule before you trust it.</p>
+  <p>If you run a web stack on Wazuh, this is a high-value detection to add once you have tuned it for your apps. It is also a template for a broader principle: find the behaviour the attacker can&rsquo;t avoid, key on it, and prove your rule before you trust it.</p>
 
   <div class="cta">
     <h3 class="sans">Get the code</h3>
-    <p>Ruleset, auditd rules, agent config, the Docker lab, the 30-case test suite, and a step-by-step install guide — all open source.</p>
+    <p>Ruleset, auditd rules, agent config, the Docker lab, the 42-case test suite, and a step-by-step install guide — all open source.</p>
     <a class="ghbtn" href="https://github.com/SAMsploit1/shellcatch">github.com/SAMsploit1/shellcatch ↗</a>
   </div>
 </main>

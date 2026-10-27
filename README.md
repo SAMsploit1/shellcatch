@@ -9,9 +9,10 @@ Validated Wazuh detections for the Wazuh Ambassador program.
 ## Detections
 
 ### [web-to-shell (PHP & Node.js)](detections/web-to-shell)
-Detects web runtimes spawning processes — webshells, command injection, and RCE
-(the React2Shell class). Three layers (auditd process execution, web-request
-payloads, FIM webshell drops), all MITRE-mapped, validated 30/30 against a live
+Detects web runtimes spawning processes — webshells, command injection, and the
+post-exploitation step of RCE such as React2Shell (CVE-2025-55182). Three layers
+(auditd process execution, web-request payloads, FIM webshell drops), all
+MITRE-mapped, validated 42/42 against a live
 `wazuh-manager` logtest engine. Includes a Docker lab and step-by-step
 [install guide](detections/web-to-shell/INSTALL.md).
 

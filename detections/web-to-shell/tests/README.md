@@ -27,20 +27,28 @@ Needs Docker. Spins up a throwaway manager with the ruleset mounted, waits for
   `100550`. Run with the manager's framework Python.
 - **cases.json** — generated; the current fixtures.
 
-## What's covered (30 cases)
+## What's covered (42 cases)
 
-- Every rule tier: shell spawn, discovery, transfer tools, interpreters,
-  base64, reverse shells (`/dev/tcp`, `mkfifo`, `nc -e`, `socat exec`), web
-  payloads, upload-dir hits, `cmd=` params.
+- Every rule tier: shell spawn, discovery, transfer tools, interpreters
+  (script file vs inline `-c`/`-e`/`-r`), base64, reverse shells (`/dev/tcp`,
+  `mkfifo`, `nc -e`, `socat exec`), web payloads, upload-dir hits, `cmd=`
+  params.
+- **Syscall coverage**: the same command via `execveat` and via the 32-bit
+  `execve` table must hit the same rule.
+- **Known-good**: PHP `mail()` → `sh -c "/usr/sbin/sendmail -t -i"` (with and
+  without `-f`) lands on 100511 at level 3, but `sendmail -t -i;id` must not.
 - **False-positive guards**: `rsync -e ssh` and `GIT_SSH_COMMAND='ssh -i ...'`
   must classify as a plain shell spawn (100510), not a reverse shell.
 - **Stock-rule overlap**: python/scp/`ps aux`/lscpu events, which stock ruleset
   `0850-audit_rules.xml` also claims, must still reach our rules via the shared
-  `if_sid`.
+  `if_sid`. Likewise web payloads that stock `31104`/`31106` claim
+  (`wget%`, `cd%20`) must still reach 100560/100562.
 - **Isolation**: a non-web user's python stays on the stock rule (92600); PHP
   and Node activity do not cross-correlate into 100550.
 
 FIM (layer 3) can't be exercised through logtest. It was validated separately
 by running syscheck on a live manager and dropping files into the monitored
 paths; all of `100570`/`100571`/`100572` fired, and `.jpg` plus `node_modules/`
-were correctly ignored.
+were correctly ignored. A separate 4.14.8 check confirmed `restrict` is sregex:
+`.php$` alerts on `shell.php` but not `shellXphp`, and `\.php$` alerts only on
+a file literally named `x\.php`.
