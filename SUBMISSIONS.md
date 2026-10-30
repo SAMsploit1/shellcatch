@@ -9,7 +9,7 @@ Site: https://samsploit1.github.io/shellcatch/
 |------|------|-------|-----------------|--------|
 | 2026-10-24 | Detection content | Web-to-shell detection (PHP & Node.js) | [detections/web-to-shell](detections/web-to-shell) | Published — rules, lab, tests, INSTALL, live dashboard screenshots |
 | 2026-10-24 | Write-up / site | Catching the moment a web app becomes a shell | [site](https://samsploit1.github.io/shellcatch/) · [source](content/blog-web-to-shell.md) | Published on GitHub Pages — republish on dev.to/Medium optional |
-| 2026-10-27 | Revision | Ambassador review feedback addressed (9 points) | [details](#review-feedback--2026-10-27) | Pushed 2026-10-27; site live; PR #122 synced (49a2ffe, runtests 40/40) |
+| 2026-10-27 | Revision | Ambassador review feedback addressed (9 points) | [details](#review-feedback--2026-10-27) | Pushed 2026-10-27; site live; PR #122 synced (5c0090e, runtests 40/40) |
 | 2026-10-24 | Upstream PR | Web-to-shell integration for `wazuh/integrations` | [PR #122](https://github.com/wazuh/integrations/pull/122) | Open — awaiting review |
 
 ---
