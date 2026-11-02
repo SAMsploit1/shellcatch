@@ -173,7 +173,7 @@ claims `python`, `scp`, `ps aux`, and `lscpu` audit events. The stock web rules
 shadowed in both places until I chained them off those stock IDs via `if_sid`.
 
 **FIM `restrict` is not a regular expression.** Wazuh has more than one pattern
-syntax. Rules and decoders use OS_Regex by default, where a plain `.` is a
+syntax. Rules and decoders use [OS_Regex](https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/regex.html) by default, where a plain `.` is a
 literal dot and `\.` means *any character*. PCRE2 is available with
 `type="pcre2"`. The syscheck `restrict` attribute uses neither: the
 [syscheck reference](https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/syscheck.html)
