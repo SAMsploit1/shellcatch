@@ -1,0 +1,64 @@
+{
+  "@timestamp": "2026-11-05T14:06:26.510474697Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 587,
+    "start": "2026-11-05T14:06:19.907000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "executable": "/usr/bin/base64",
+    "exit_code": 0,
+    "name": "base64",
+    "parent": {
+      "pid": 12984
+    },
+    "pid": 12987
+  },
+  "rule": {
+    "name": "web_exec_php"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "33"
+      },
+      "id": "33",
+      "name": "www-data"
+    },
+    "group": {
+      "id": "33"
+    }
+  },
+  "wazuh": {
+    "event": {
+      "id": "e01581c9-3e19-4738-aec6-b717eec7d077"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

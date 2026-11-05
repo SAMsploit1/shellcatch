@@ -1,0 +1,73 @@
+{
+  "@timestamp": "2026-11-05T14:06:36.558228738Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 597,
+    "start": "2026-11-05T14:06:26.013000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "args": [
+      "python3",
+      "-c",
+      "print(1)"
+    ],
+    "args_count": 3,
+    "command_line": "python3 -c print(1)",
+    "executable": "/usr/bin/python3.12",
+    "exit_code": 0,
+    "name": "python3",
+    "parent": {
+      "pid": 13009
+    },
+    "pid": 13011,
+    "title": "python3 -c print(1)",
+    "working_directory": "/var/www/html"
+  },
+  "rule": {
+    "name": "web_exec_php"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "33"
+      },
+      "id": "33",
+      "name": "www-data"
+    },
+    "group": {
+      "id": "33"
+    }
+  },
+  "wazuh": {
+    "event": {
+      "id": "d7038261-49b2-4328-9567-e16b9a69af8f"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

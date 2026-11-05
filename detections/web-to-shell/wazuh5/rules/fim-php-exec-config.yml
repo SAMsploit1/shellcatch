@@ -1,0 +1,39 @@
+# Migrated from 4.x rule 100571 (level 12 -> high).
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: PHP execution config created or changed: {{file.path}}"
+  author: SAMspl0it
+  description: >-
+    An .htaccess or .user.ini under the webroot was created or modified. Both
+    can turn an upload directory into an execution directory or auto-prepend
+    a payload to every script.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: file_event
+  service: fim
+detection:
+  condition: fim and webroot and config
+  fim:
+    wazuh.integration.name: wazuh-fim
+    event.action: [created, modified]
+  webroot:
+    file.path|startswith: /var/www/
+  config:
+    file.name: [.htaccess, .user.ini]
+mitre:
+  tactic:
+    id: [TA0003]
+    name: [Persistence]
+  technique:
+    id: [T1505, T1546]
+    name: [Server Software Component, Event Triggered Execution]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.persistence, attack.t1505.003, attack.t1546, shellcatch.drop]
+falsepositives:
+  - Planned configuration changes.

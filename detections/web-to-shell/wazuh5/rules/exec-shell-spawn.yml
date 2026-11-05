@@ -1,0 +1,58 @@
+# Migrated from 4.x rules 100510 (level 8 -> medium) and 100511 (the PHP mail()
+# allowlist child, level 3). 4.x lowered the known-good case with a child rule
+# matched on a hex-encoded argument; 5.0 has no rule children, so it becomes a
+# Sigma filter on the decoded command line. Observed on 5.0.0-rc2 with PHP 8.3:
+#   sh -c -- /usr/sbin/sendmail -t -i
+#   sh -c -- /usr/sbin/sendmail -t -i -fnoreply@example.com
+# The startswith form only passes when no shell metacharacter follows, so an
+# appended ";id" or "|sh" still alerts. Edit if your sendmail_path differs.
+enabled: true
+status: experimental
+level: medium
+metadata:
+  title: "Web-to-shell: shell {{process.name}} spawned by web runtime"
+  author: SAMspl0it
+  description: >-
+    A web service account started a shell. PHP system()/exec() and Node
+    child_process.exec() both go through /bin/sh -c, so this is the generic
+    signal for command execution from a web app.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  # Written out with De Morgan's law on purpose. The natural form,
+  #   not (php_mail or (php_mail_sender and not metachar))
+  # is mis-evaluated on 5.0.0-rc2: a "not" nested inside a negated group is
+  # lost (see the README). Keep the expanded form until that is fixed.
+  condition: web_exec and shell and not php_mail and (not php_mail_sender or metachar) and not payload
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  shell:
+    process.name: [sh, bash, dash, zsh, ksh, csh, tcsh, ash, busybox]
+  php_mail:
+    process.command_line: ["sh -c -- /usr/sbin/sendmail -t -i", "sh -c /usr/sbin/sendmail -t -i"]
+  php_mail_sender:
+    process.command_line|startswith: ["sh -c -- /usr/sbin/sendmail -t -i -f", "sh -c /usr/sbin/sendmail -t -i -f"]
+  metachar:
+    process.command_line|contains: [";", "|", "&", "`", "$(", ">", "<"]
+  # One finding per event: these command lines have their own higher rules.
+  payload:
+    process.command_line|contains: ["/dev/tcp/", "/dev/udp/", "mkfifo ", "sh -i", "bash -i", "base64 -d", "base64 --decode", "base64 -di", "base64 -id"]
+mitre:
+  tactic:
+    id: [TA0002, TA0003]
+    name: [Execution, Persistence]
+  technique:
+    id: [T1059, T1505]
+    name: [Command and Scripting Interpreter, Server Software Component]
+  subtechnique:
+    id: [T1059.004, T1505.003]
+    name: [Unix Shell, Web Shell]
+tags: [attack.execution, attack.t1059.004, attack.t1505.003, shellcatch.spawn]
+falsepositives:
+  - ImageMagick, wkhtmltopdf, git deploy hooks, Composer. Add a filter per known command line.

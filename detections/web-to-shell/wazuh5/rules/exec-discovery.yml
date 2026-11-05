@@ -1,0 +1,40 @@
+# Migrated from 4.x rule 100520 (level 12 -> high).
+# 4.x: <field name="audit.exe" type="pcre2">/(?:id|whoami|...)$</field>.
+# 5.0: process.name list. A |re with a "/" in it never matches on 5.0.0-rc2
+# (see the README), and an exact name list is clearer anyway.
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: discovery command {{process.name}} launched by web runtime"
+  author: SAMspl0it
+  description: >-
+    A web service account ran a host or user discovery command: the first
+    thing an attacker types into a new webshell.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and discovery
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  discovery:
+    process.name: [id, whoami, uname, hostname, hostnamectl, ifconfig, ip, netstat, ss, ps, w, who, last, lsb_release, getent, groups, lscpu, crontab]
+mitre:
+  tactic:
+    id: [TA0007, TA0003]
+    name: [Discovery, Persistence]
+  technique:
+    id: [T1033, T1082, T1016, T1505]
+    name: [System Owner/User Discovery, System Information Discovery, System Network Configuration Discovery, Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.discovery, attack.t1033, attack.t1082, attack.t1016, attack.t1505.003, shellcatch.activity]
+falsepositives:
+  - Monitoring or status pages that shell out to uname/hostname.

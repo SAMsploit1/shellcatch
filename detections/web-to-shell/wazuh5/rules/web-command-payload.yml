@@ -1,0 +1,44 @@
+# Migrated from 4.x rule 100560 (level 12 -> high).
+# 4.x chained off stock web rules 31100/31104/31106/31108 because those claimed
+# the event first. 5.0 rules evaluate every event independently, so the chain
+# (and the shadowing problem it worked around) is gone.
+# url.original holds the request target as logged (percent-encoded). The
+# paths are listed literally because |re cannot contain "/" on 5.0.0-rc2.
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: command execution payload in request from {{source.ip}}"
+  author: SAMspl0it
+  description: >-
+    The request line carries a code-execution function name or a shell or
+    /dev/tcp path. Only the request line is logged by nginx/Apache; POST
+    bodies are invisible to this rule.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: webserver
+  service: access
+detection:
+  condition: access and 1 of payload_*
+  access:
+    event.action: http-request
+  # Case-insensitive by character class: |re|i is documented but rejected on 5.0.0-rc2.
+  payload_function:
+    url.original|re: "([sS][yY][sS][tT][eE][mM]|[pP][aA][sS][sS][tT][hH][rR][uU]|[sS][hH][eE][lL][lL]_[eE][xX][eE][cC]|[pP][rR][oO][cC]_[oO][pP][eE][nN]|[pP][oO][pP][eE][nN]|[pP][cC][nN][tT][lL]_[eE][xX][eE][cC]|[cC][hH][iI][lL][dD]_[pP][rR][oO][cC][eE][sS][sS]|[eE][xX][eE][cC][sS][yY][nN][cC]|[sS][pP][aA][wW][nN][sS][yY][nN][cC])([(]|%28|%2528|[.]|%2[eE])"
+  payload_path:
+    url.original|contains: ["/bin/sh", "/bin/bash", "%2Fbin%2Fsh", "%2fbin%2fsh", "%2Fbin%2Fbash", "%2fbin%2fbash", "/dev/tcp", "%2Fdev%2Ftcp", "%2fdev%2ftcp"]
+mitre:
+  tactic:
+    id: [TA0001, TA0003]
+    name: [Initial Access, Persistence]
+  technique:
+    id: [T1190, T1505]
+    name: [Exploit Public-Facing Application, Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.initial-access, attack.t1190, attack.t1505.003, shellcatch.request]
+falsepositives:
+  - Security scanners you run yourself.

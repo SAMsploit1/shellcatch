@@ -1,0 +1,41 @@
+# Migrated from 4.x rule 100541 (level 12 -> high).
+# 4.x matched the hex form 626173653634202D64 ("base64 -d"); 5.0 decodes it.
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: base64-decoded command line executed by web runtime"
+  author: SAMspl0it
+  description: >-
+    A shell started by a web service account decodes base64 inline, the usual
+    way to pass an obfuscated payload through a webshell or injection point.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and decode and not reverse_shell
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  decode:
+    process.command_line|contains: ["base64 -d", "base64 --decode", "base64 -di", "base64 -id"]
+  # One finding per event: the reverse-shell rule already covers these.
+  reverse_shell:
+    process.command_line|contains: ["/dev/tcp/", "/dev/udp/", "mkfifo ", "sh -i", "bash -i"]
+mitre:
+  tactic:
+    id: [TA0005, TA0003]
+    name: [Defense Evasion, Persistence]
+  technique:
+    id: [T1140, T1027, T1505]
+    name: [Deobfuscate/Decode Files or Information, Obfuscated Files or Information, Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.defense-evasion, attack.t1140, attack.t1027, attack.t1505.003, shellcatch.activity]
+falsepositives:
+  - Applications that shell out to decode base64 instead of using the language's own decoder.

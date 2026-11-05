@@ -1,0 +1,119 @@
+{
+ "type": "monitor",
+ "monitor_type": "bucket_level_monitor",
+ "name": "web-to-shell: first time a web account runs this binary on this host",
+ "enabled": true,
+ "schedule": {
+  "period": {
+   "interval": 1,
+   "unit": "MINUTES"
+  }
+ },
+ "inputs": [
+  {
+   "search": {
+    "indices": [
+     "wazuh-events-v5-system-activity*"
+    ],
+    "query": {
+     "size": 0,
+     "query": {
+      "bool": {
+       "filter": [
+        {
+         "terms": {
+          "rule.name": [
+           "web_exec_php",
+           "web_exec_node"
+          ]
+         }
+        },
+        {
+         "term": {
+          "event.action": "started"
+         }
+        },
+        {
+         "range": {
+          "@timestamp": {
+           "gte": "{{period_end}}||-7d",
+           "lte": "{{period_end}}",
+           "format": "epoch_millis"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregations": {
+      "by": {
+       "composite": {
+        "size": 1000,
+        "sources": [
+         {
+          "agent": {
+           "terms": {
+            "field": "wazuh.agent.id"
+           }
+          }
+         },
+         {
+          "exe": {
+           "terms": {
+            "field": "process.executable"
+           }
+          }
+         }
+        ]
+       },
+       "aggregations": {
+        "recent": {
+         "filter": {
+          "range": {
+           "@timestamp": {
+            "gte": "{{period_end}}||-2m",
+            "lte": "{{period_end}}",
+            "format": "epoch_millis"
+           }
+          }
+         }
+        },
+        "before": {
+         "filter": {
+          "range": {
+           "@timestamp": {
+            "lt": "{{period_end}}||-2m",
+            "format": "epoch_millis"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ],
+ "triggers": [
+  {
+   "bucket_level_trigger": {
+    "name": "binary not run by a web account on this host in the past 7 days",
+    "severity": "3",
+    "condition": {
+     "buckets_path": {
+      "recent": "recent>_count",
+      "before": "before>_count"
+     },
+     "parent_bucket_path": "by",
+     "script": {
+      "source": "params.recent > 0 && params.before == 0",
+      "lang": "painless"
+     }
+    },
+    "actions": []
+   }
+  }
+ ],
+ "_comment": "The 4.x if_fts idea, over raw events rather than findings so it also covers binaries no rule names. Baseline is whatever the events index retains, up to 7 days; a new host alerts on everything for its first runs."
+}

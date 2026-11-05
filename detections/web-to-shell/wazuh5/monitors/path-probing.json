@@ -1,0 +1,89 @@
+{
+ "type": "monitor",
+ "monitor_type": "bucket_level_monitor",
+ "name": "web-to-shell: one source probing webshell paths",
+ "enabled": true,
+ "schedule": {
+  "period": {
+   "interval": 1,
+   "unit": "MINUTES"
+  }
+ },
+ "inputs": [
+  {
+   "search": {
+    "indices": [
+     "wazuh-findings-v5-*"
+    ],
+    "query": {
+     "size": 0,
+     "query": {
+      "bool": {
+       "filter": [
+        {
+         "terms": {
+          "wazuh.rule.tags": [
+           "shellcatch.request"
+          ]
+         }
+        },
+        {
+         "range": {
+          "@timestamp": {
+           "gte": "{{period_end}}||-10m",
+           "lte": "{{period_end}}",
+           "format": "epoch_millis"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregations": {
+      "by": {
+       "composite": {
+        "size": 1000,
+        "sources": [
+         {
+          "source": {
+           "terms": {
+            "field": "source.ip"
+           }
+          }
+         }
+        ]
+       },
+       "aggregations": {
+        "paths": {
+         "cardinality": {
+          "field": "url.path"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ],
+ "triggers": [
+  {
+   "bucket_level_trigger": {
+    "name": "3+ distinct suspicious URL paths from one source in 10 minutes",
+    "severity": "2",
+    "condition": {
+     "buckets_path": {
+      "paths": "paths"
+     },
+     "parent_bucket_path": "by",
+     "script": {
+      "source": "params.paths >= 3",
+      "lang": "painless"
+     }
+    },
+    "actions": []
+   }
+  }
+ ],
+ "_comment": "The 4.x different_url idea: count distinct values, not events. One client hitting the same webshell ten times is one path; a scanner trying shell.php, cmd.php, up.php is three."
+}

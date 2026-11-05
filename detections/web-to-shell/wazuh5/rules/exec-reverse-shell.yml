@@ -1,0 +1,47 @@
+# Migrated from 4.x rule 100530 (level 15 -> critical).
+# 4.x needed a hex-encoded alternation because auditd hex-encodes any argument
+# with spaces. The 5.0 auditd decoder rebuilds process.command_line from the
+# EXECVE record, so plain substrings are enough.
+enabled: true
+status: experimental
+level: critical
+metadata:
+  title: "Web-to-shell: reverse shell launched by web runtime ({{process.executable}})"
+  author: SAMspl0it
+  description: >-
+    A web service account (PHP-FPM/mod_php or Node.js) started a process whose
+    command line opens an interactive or network-attached shell: /dev/tcp or
+    /dev/udp redirection, a named pipe, an interactive shell, or socat exec.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+    - https://attack.mitre.org/techniques/T1505/003/
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and 1 of payload_*
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  payload_redirect:
+    process.command_line|contains: ["/dev/tcp/", "/dev/udp/", "mkfifo "]
+  payload_interactive:
+    process.command_line|contains: ["sh -i", "bash -i"]
+  payload_socat:
+    process.name: socat
+    process.command_line|contains: ["exec:", "system:"]
+mitre:
+  tactic:
+    id: [TA0003, TA0002, TA0011]
+    name: [Persistence, Execution, Command and Control]
+  technique:
+    id: [T1505, T1059, T1071]
+    name: [Server Software Component, Command and Scripting Interpreter, Application Layer Protocol]
+  subtechnique:
+    id: [T1505.003, T1059.004]
+    name: [Web Shell, Unix Shell]
+tags: [attack.persistence, attack.execution, attack.t1505.003, attack.t1059.004, attack.t1071, shellcatch.activity]
+falsepositives:
+  - None expected from a web runtime.

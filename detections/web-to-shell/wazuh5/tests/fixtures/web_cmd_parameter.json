@@ -1,0 +1,70 @@
+{
+  "@timestamp": "2026-11-05T14:06:46.605854973Z",
+  "event": {
+    "action": "http-request",
+    "category": [
+      "web"
+    ],
+    "dataset": "apache-access",
+    "kind": "event",
+    "outcome": "failure",
+    "start": "2026-11-05T14:06:42.000Z",
+    "type": [
+      "access"
+    ]
+  },
+  "http": {
+    "request": {
+      "method": "GET"
+    },
+    "response": {
+      "body": {
+        "bytes": 162
+      },
+      "status_code": 404
+    },
+    "version": "1.1"
+  },
+  "related": {
+    "ip": [
+      "127.0.0.1"
+    ]
+  },
+  "service": {
+    "type": "apache"
+  },
+  "source": {
+    "address": "127.0.0.1",
+    "ip": "127.0.0.1"
+  },
+  "url": {
+    "extension": "php",
+    "original": "/shell.php?cmd=ls",
+    "path": "/shell.php",
+    "query": "cmd=ls"
+  },
+  "user": {},
+  "user_agent": {
+    "original": "curl/8.5.0"
+  },
+  "wazuh": {
+    "event": {
+      "id": "ea00274b-e454-4632-ac7e-f511612ff437"
+    },
+    "integration": {
+      "category": "applications",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/apache-access/0"
+      ],
+      "name": "apache-http"
+    },
+    "protocol": {
+      "location": "/var/log/nginx/access.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

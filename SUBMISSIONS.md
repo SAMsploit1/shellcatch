@@ -11,6 +11,7 @@ Site: https://samsploit1.github.io/shellcatch/
 | 2026-10-24 | Write-up / site | Catching the moment a web app becomes a shell | [site](https://samsploit1.github.io/shellcatch/) · [source](content/blog-web-to-shell.md) | Published on GitHub Pages — republish on dev.to/Medium optional |
 | 2026-10-27 | Revision | Ambassador review feedback addressed (9 points) | [details](#review-feedback--2026-10-27) | Pushed 2026-10-27; site live; PR #122 synced (5c0090e, runtests 40/40) |
 | 2026-10-24 | Upstream PR | Web-to-shell integration for `wazuh/integrations` | [PR #122](https://github.com/wazuh/integrations/pull/122) | Open — awaiting review |
+| 2026-11-05 | Detection content + write-up | web-to-shell migrated to Wazuh 5.0 (Sigma rules, correlation monitors, tested on rc2) | [detections/web-to-shell/wazuh5](detections/web-to-shell/wazuh5) · [draft post](content/blog-wazuh5-migration.md) | Built and validated on a live 5.0.0-rc2 lab; not yet committed or published |
 
 ---
 
@@ -98,6 +99,30 @@ Ambassador reviewer's change requests on contribution 1, and what changed:
 8. **Lab warning.** Added to the article, README, INSTALL and setup-victim.sh.
 9. **React2Shell.** Cites CVE-2025-55182 (Dec 2025) and says the detection catches
    post-exploitation, not the CVE. Publish/update dates added to the post.
+
+## Contribution 4 — web-to-shell on Wazuh 5.0 (2026-11-05)
+
+**Type:** Detection content migration + technical write-up + upstream bug reports
+**Platform:** Wazuh 5.0.0-rc2 (all-in-one + 5.0 agent, Ubuntu 24.04), Azure lab `rg-wazuh5-lab`
+
+The 4.x pack ported to the 5.0 content model as a rules-only custom
+integration (`web-to-shell`) over the standard auditd, wazuh-fim and
+apache-http integrations.
+
+- 15 Sigma rules (from 19 XML rules), 4 Alerting correlation monitors
+  (count, ordered sequence, distinct-count, first-seen)
+- `w2s.py`: deploy/promote/test/detector/monitors over the Content Manager API
+- 26 test cases with fixtures captured from live events; 26/26 via
+  `logtest/detection`; every rule fired on the live detector; negatives silent
+- `attack-sequence.sh` raised all 4 monitor alerts within 2 minutes
+- Three rc2 Sigma-backend issues found, root-caused from the compiled queries,
+  drafted in [upstream/issues-5.0-rc2-sigma-backend.md](upstream/issues-5.0-rc2-sigma-backend.md)
+  (not filed yet)
+- Fixed `lab/setup-victim.sh` on Ubuntu 24.04 (picked the unversioned
+  `php-fpm.sock` symlink)
+
+**Next:** file the issues; possibly a fix PR to `wazuh-indexer-security-analytics`;
+add `integrations/web_to_shell` 5.0 content next to PR #122; publish the post.
 
 ## Pipeline / ideas
 

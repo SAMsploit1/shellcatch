@@ -1,0 +1,40 @@
+# Migrated from 4.x rule 100531 (level 15 -> critical).
+# 4.x regex a\d+="-[ec]" on the raw EXECVE record becomes an element match on
+# the decoded process.args array.
+enabled: true
+status: experimental
+level: critical
+metadata:
+  title: "Web-to-shell: netcat with command execution flag launched by web runtime"
+  author: SAMspl0it
+  description: >-
+    A web service account ran netcat with -e or -c, which binds a shell to a
+    network connection.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and netcat
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  netcat:
+    process.name: [nc, ncat, netcat, nc.traditional, nc.openbsd]
+    process.args: ["-e", "-c"]
+mitre:
+  tactic:
+    id: [TA0003, TA0002]
+    name: [Persistence, Execution]
+  technique:
+    id: [T1505, T1059]
+    name: [Server Software Component, Command and Scripting Interpreter]
+  subtechnique:
+    id: [T1505.003, T1059.004]
+    name: [Web Shell, Unix Shell]
+tags: [attack.persistence, attack.execution, attack.t1505.003, attack.t1059.004, shellcatch.activity]
+falsepositives:
+  - None expected from a web runtime.

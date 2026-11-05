@@ -1,0 +1,69 @@
+{
+  "@timestamp": "2026-11-05T14:06:56.652889334Z",
+  "event": {
+    "action": "http-request",
+    "category": [
+      "web"
+    ],
+    "dataset": "apache-access",
+    "kind": "event",
+    "outcome": "success",
+    "start": "2026-11-05T14:06:48.000Z",
+    "type": [
+      "access"
+    ]
+  },
+  "http": {
+    "request": {
+      "method": "GET"
+    },
+    "response": {
+      "body": {
+        "bytes": 20
+      },
+      "status_code": 200
+    },
+    "version": "1.1"
+  },
+  "related": {
+    "ip": [
+      "127.0.0.1"
+    ]
+  },
+  "service": {
+    "type": "apache"
+  },
+  "source": {
+    "address": "127.0.0.1",
+    "ip": "127.0.0.1"
+  },
+  "url": {
+    "extension": "php",
+    "original": "/uploads/note.php",
+    "path": "/uploads/note.php"
+  },
+  "user": {},
+  "user_agent": {
+    "original": "curl/8.5.0"
+  },
+  "wazuh": {
+    "event": {
+      "id": "5eca7567-c5c3-424a-bfaa-4e2f73995855"
+    },
+    "integration": {
+      "category": "applications",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/apache-access/0"
+      ],
+      "name": "apache-http"
+    },
+    "protocol": {
+      "location": "/var/log/nginx/access.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

@@ -49,7 +49,9 @@ systemctl daemon-reload
 systemctl enable --now nodeapp >/dev/null
 
 echo "[+] nginx site (PHP everywhere, including uploads/: vulnerable by design)"
-FPM_SOCK="$(ls /run/php/php*-fpm.sock | head -1)"
+# Pick the versioned socket (php8.3-fpm.sock): Ubuntu 24.04 also ships an
+# unversioned php-fpm.sock symlink whose name is not a systemd unit.
+FPM_SOCK="$(ls /run/php/php[0-9]*-fpm.sock | head -1)"
 cat > /etc/nginx/sites-available/default <<EOF
 server {
     listen 80 default_server;

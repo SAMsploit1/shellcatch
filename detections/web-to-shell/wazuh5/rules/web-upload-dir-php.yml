@@ -1,0 +1,42 @@
+# Migrated from 4.x rule 100561 (level 10 -> high).
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: successful request to PHP script in upload directory from {{source.ip}}"
+  author: SAMspl0it
+  description: >-
+    A 2xx response for a PHP script under an upload, media or cache directory:
+    those directories should hold data, not code, so this is usually a
+    webshell being used.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: webserver
+  service: access
+detection:
+  condition: access and success and upload_dir and php
+  access:
+    event.action: http-request
+  success:
+    http.response.status_code|gte: 200
+    http.response.status_code|lt: 300
+  upload_dir:
+    url.path|contains: ["/upload/", "/uploads/", "/files/", "/image/", "/images/", "/img/", "/media/", "/tmp/", "/cache/", "/assets/"]
+  # Case-insensitive by character class: |re|i is documented but rejected on 5.0.0-rc2.
+  php:
+    url.extension|re: "^([pP][hH][pP][0-9]?|[pP][hH][tT][mM][lL]|[pP][hH][aA][rR]|[pP][hH][tT])$"
+mitre:
+  tactic:
+    id: [TA0003]
+    name: [Persistence]
+  technique:
+    id: [T1505]
+    name: [Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.persistence, attack.t1505.003, shellcatch.request]
+falsepositives:
+  - Apps that keep real PHP code under one of these directory names.

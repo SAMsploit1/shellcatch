@@ -1,0 +1,89 @@
+{
+ "type": "monitor",
+ "monitor_type": "bucket_level_monitor",
+ "name": "web-to-shell: interactive webshell (repeated post-exploitation)",
+ "enabled": true,
+ "schedule": {
+  "period": {
+   "interval": 1,
+   "unit": "MINUTES"
+  }
+ },
+ "inputs": [
+  {
+   "search": {
+    "indices": [
+     "wazuh-findings-v5-*"
+    ],
+    "query": {
+     "size": 0,
+     "query": {
+      "bool": {
+       "filter": [
+        {
+         "terms": {
+          "wazuh.rule.tags": [
+           "shellcatch.activity"
+          ]
+         }
+        },
+        {
+         "range": {
+          "@timestamp": {
+           "gte": "{{period_end}}||-5m",
+           "lte": "{{period_end}}",
+           "format": "epoch_millis"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregations": {
+      "by": {
+       "composite": {
+        "size": 1000,
+        "sources": [
+         {
+          "agent": {
+           "terms": {
+            "field": "wazuh.agent.id"
+           }
+          }
+         },
+         {
+          "account": {
+           "terms": {
+            "field": "user.effective.name"
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   }
+  }
+ ],
+ "triggers": [
+  {
+   "bucket_level_trigger": {
+    "name": "3+ post-exploitation commands by one web account in 5 minutes",
+    "severity": "1",
+    "condition": {
+     "buckets_path": {
+      "n": "_count"
+     },
+     "parent_bucket_path": "by",
+     "script": {
+      "source": "params.n >= 3",
+      "lang": "painless"
+     }
+    },
+    "actions": []
+   }
+  }
+ ],
+ "_comment": "Replaces 4.x rule 100550 (frequency=3 timeframe=120, if_matched_group web_shell_activity, same_field audit.uid). Window is 5m, not 2m: detectors write findings every 1-2 minutes, stamped with the event time."
+}

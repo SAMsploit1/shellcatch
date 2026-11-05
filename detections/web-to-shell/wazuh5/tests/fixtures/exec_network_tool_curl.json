@@ -1,0 +1,75 @@
+{
+  "@timestamp": "2026-11-05T14:06:26.510465896Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 583,
+    "start": "2026-11-05T14:06:17.867000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "args": [
+      "curl",
+      "-s",
+      "http://127.0.0.1/",
+      "-o",
+      "/dev/null"
+    ],
+    "args_count": 5,
+    "command_line": "curl -s http://127.0.0.1/ -o /dev/null",
+    "executable": "/usr/bin/curl",
+    "exit_code": 0,
+    "name": "curl",
+    "parent": {
+      "pid": 12978
+    },
+    "pid": 12980,
+    "title": "curl -s http://127.0.0.1/ -o /dev/null",
+    "working_directory": "/var/www/html"
+  },
+  "rule": {
+    "name": "web_exec_php"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "33"
+      },
+      "id": "33",
+      "name": "www-data"
+    },
+    "group": {
+      "id": "33"
+    }
+  },
+  "wazuh": {
+    "event": {
+      "id": "f86b5c4e-3734-4dbe-9cfe-cc22bbd84ec3"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

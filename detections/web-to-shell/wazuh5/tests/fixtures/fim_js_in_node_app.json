@@ -1,0 +1,73 @@
+{
+  "@timestamp": "2026-11-05T14:06:56.652902434Z",
+  "data_stream": {
+    "dataset": "wazuh.fim",
+    "type": "logs"
+  },
+  "event": {
+    "action": "created",
+    "category": [
+      "file"
+    ],
+    "created": "2026-11-05T14:06:50.329Z",
+    "dataset": "wazuh.fim",
+    "kind": "event",
+    "outcome": "success",
+    "reason": "realtime",
+    "type": [
+      "creation"
+    ]
+  },
+  "file": {
+    "device": "2049",
+    "directory": "/opt/nodeapp",
+    "extension": "js",
+    "gid": "0",
+    "group": "root",
+    "hash": {
+      "md5": "6cd237310244539a24846274a3f71803",
+      "sha1": "4f34d4184dfcb3ee7509f2f48258ce9241d98107",
+      "sha256": "3879a5d930ae1999b278a3a498f7de3fd83ba8dae59330fcfa2db31c103ac21d"
+    },
+    "inode": "263513",
+    "mode": [
+      "rw-r--r--"
+    ],
+    "mtime": "2026-11-05T14:06:50.000Z",
+    "name": "lab-marker.js",
+    "owner": "root",
+    "path": "/opt/nodeapp/lab-marker.js",
+    "size": 15,
+    "uid": "0"
+  },
+  "related": {
+    "hash": [
+      "6cd237310244539a24846274a3f71803",
+      "4f34d4184dfcb3ee7509f2f48258ce9241d98107",
+      "3879a5d930ae1999b278a3a498f7de3fd83ba8dae59330fcfa2db31c103ac21d"
+    ],
+    "user": [
+      "root"
+    ]
+  },
+  "wazuh": {
+    "event": {
+      "id": "d2b75ca7-730d-447d-ae1e-aca45f1887d6"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/wazuh-fim/0"
+      ],
+      "name": "wazuh-fim"
+    },
+    "protocol": {
+      "location": "syscheck",
+      "queue": 56
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

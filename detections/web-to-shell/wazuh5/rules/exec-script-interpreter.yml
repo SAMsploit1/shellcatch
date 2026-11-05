@@ -1,0 +1,42 @@
+# Migrated from 4.x rule 100522 (level 10 -> high).
+# In 4.x the inline-code rule sat above this one and won the event. 5.0 rules
+# do not compete, so the exclusion is written out to keep one finding per event.
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: script interpreter {{process.name}} launched by web runtime"
+  author: SAMspl0it
+  description: >-
+    A web service account started a script interpreter. Covers legitimate
+    cases too (PHP CLI scripts, php artisan), so it ranks below inline code.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and interpreter and not inline
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  # Tune: drop php if your app legitimately shells out to the PHP CLI.
+  interpreter:
+    process.name|re: "^(python[0-9.]*|perl[0-9.]*|ruby[0-9.]*|lua[0-9.]*|php[0-9.]*)$"
+  inline:
+    process.args: ["-c", "-e", "-E", "-r", "-p", "--eval", "--print"]
+mitre:
+  tactic:
+    id: [TA0002, TA0003]
+    name: [Execution, Persistence]
+  technique:
+    id: [T1059, T1505]
+    name: [Command and Scripting Interpreter, Server Software Component]
+  subtechnique:
+    id: [T1059.006, T1505.003]
+    name: [Python, Web Shell]
+tags: [attack.execution, attack.t1059.006, attack.t1505.003, shellcatch.activity]
+falsepositives:
+  - PHP CLI scripts or framework commands started from the web app.

@@ -1,0 +1,43 @@
+# Migrated from 4.x rule 100521 (level 12 -> high).
+# 4.x also chained off stock 92603 because that rule could claim scp/sftp
+# events first. 5.0 rules don't compete for an event, so the chain goes away.
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: network or transfer tool {{process.name}} launched by web runtime"
+  author: SAMspl0it
+  description: >-
+    A web service account ran a download or transfer tool: typically fetching
+    a second-stage payload or exfiltrating data from a compromised web app.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and tool and not netcat_exec
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  tool:
+    process.name: [curl, wget, nc, ncat, netcat, nc.traditional, nc.openbsd, socat, telnet, ftp, tftp, scp, sftp]
+  # One finding per event: netcat -e/-c has its own critical rule.
+  netcat_exec:
+    process.name: [nc, ncat, netcat, nc.traditional, nc.openbsd]
+    process.args: ["-e", "-c"]
+mitre:
+  tactic:
+    id: [TA0011, TA0003]
+    name: [Command and Control, Persistence]
+  technique:
+    id: [T1105, T1505]
+    name: [Ingress Tool Transfer, Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.command-and-control, attack.t1105, attack.t1505.003, shellcatch.activity]
+falsepositives:
+  - Apps that legitimately shell out to curl (prefer the language's HTTP client, or add a filter for the exact command line).

@@ -1,0 +1,41 @@
+# Migrated from 4.x rule 100523 (level 12 -> high).
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: inline code executed by {{process.name}} launched by web runtime"
+  author: SAMspl0it
+  description: >-
+    A web service account started a script interpreter with inline code
+    (python -c, perl -e, php -r, node -e): running a payload without
+    dropping a file.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and interpreter and inline
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  # No "/" in this pattern, so |re is safe here.
+  interpreter:
+    process.name|re: "^(python[0-9.]*|perl[0-9.]*|ruby[0-9.]*|lua[0-9.]*|php[0-9.]*|node)$"
+  inline:
+    process.args: ["-c", "-e", "-E", "-r", "-p", "--eval", "--print"]
+mitre:
+  tactic:
+    id: [TA0002, TA0003]
+    name: [Execution, Persistence]
+  technique:
+    id: [T1059, T1505]
+    name: [Command and Scripting Interpreter, Server Software Component]
+  subtechnique:
+    id: [T1059.006, T1505.003]
+    name: [Python, Web Shell]
+tags: [attack.execution, attack.t1059.006, attack.t1505.003, shellcatch.activity]
+falsepositives:
+  - Apps that run one-liners through an interpreter (rare; prefer a script file).

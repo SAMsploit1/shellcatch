@@ -1,0 +1,73 @@
+{
+  "@timestamp": "2026-11-05T14:06:36.558240138Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 601,
+    "start": "2026-11-05T14:06:30.115000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "args": [
+      "/bin/sh",
+      "-c",
+      "ping -c 1 -W 1 127.0.0.1;uname -a"
+    ],
+    "args_count": 3,
+    "command_line": "/bin/sh -c ping -c 1 -W 1 127.0.0.1;uname -a",
+    "executable": "/usr/bin/dash",
+    "exit_code": 0,
+    "name": "sh",
+    "parent": {
+      "pid": 8733
+    },
+    "pid": 13021,
+    "title": "/bin/sh -c ping -c 1 -W 1 127.0.0.1;uname -a",
+    "working_directory": "/opt/nodeapp"
+  },
+  "rule": {
+    "name": "web_exec_node"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "988"
+      },
+      "id": "999",
+      "name": "nodeapp"
+    },
+    "group": {
+      "id": "988"
+    }
+  },
+  "wazuh": {
+    "event": {
+      "id": "aa04df01-4fd2-44e0-914d-020c4ddcf5b5"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

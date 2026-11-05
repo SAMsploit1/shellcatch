@@ -1,0 +1,75 @@
+{
+  "@timestamp": "2026-11-05T14:06:26.510483397Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 594,
+    "start": "2026-11-05T14:06:23.978000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "args": [
+      "nc",
+      "-e",
+      "/bin/true",
+      "127.0.0.1",
+      "9"
+    ],
+    "args_count": 5,
+    "command_line": "nc -e /bin/true 127.0.0.1 9",
+    "executable": "/usr/bin/nc.openbsd",
+    "exit_code": 0,
+    "name": "nc",
+    "parent": {
+      "pid": 13003
+    },
+    "pid": 13005,
+    "title": "nc -e /bin/true 127.0.0.1 9",
+    "working_directory": "/var/www/html"
+  },
+  "rule": {
+    "name": "web_exec_php"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "33"
+      },
+      "id": "33",
+      "name": "www-data"
+    },
+    "group": {
+      "id": "33"
+    }
+  },
+  "wazuh": {
+    "event": {
+      "id": "4216e5a1-70e6-4d22-93e5-b4d352f96005"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

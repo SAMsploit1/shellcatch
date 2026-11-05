@@ -1,0 +1,76 @@
+{
+  "@timestamp": "2026-11-05T14:06:46.605856973Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 638,
+    "start": "2026-11-05T14:06:44.295000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "args": [
+      "ping",
+      "-c",
+      "1",
+      "-W",
+      "1",
+      "127.0.0.1"
+    ],
+    "args_count": 6,
+    "command_line": "ping -c 1 -W 1 127.0.0.1",
+    "executable": "/usr/bin/ping",
+    "exit_code": 0,
+    "name": "ping",
+    "parent": {
+      "pid": 13055
+    },
+    "pid": 13056,
+    "title": "ping -c 1 -W 1 127.0.0.1",
+    "working_directory": "/var/www/html"
+  },
+  "rule": {
+    "name": "web_exec_php"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "33"
+      },
+      "id": "33",
+      "name": "www-data"
+    },
+    "group": {
+      "id": "33"
+    }
+  },
+  "wazuh": {
+    "event": {
+      "id": "84eafe56-685c-476a-9b54-e8a5111eea40"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

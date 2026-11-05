@@ -1,0 +1,73 @@
+{
+  "@timestamp": "2026-11-05T13:54:15.883637250Z",
+  "data_stream": {
+    "dataset": "wazuh.fim",
+    "type": "logs"
+  },
+  "event": {
+    "action": "created",
+    "category": [
+      "file"
+    ],
+    "created": "2026-11-05T13:54:15.627Z",
+    "dataset": "wazuh.fim",
+    "kind": "event",
+    "outcome": "success",
+    "reason": "realtime",
+    "type": [
+      "creation"
+    ]
+  },
+  "file": {
+    "device": "2049",
+    "directory": "/var/www/html/uploads",
+    "extension": "php",
+    "gid": "33",
+    "group": "www-data",
+    "hash": {
+      "md5": "e0effc9fae7558d688562abd3410d7a4",
+      "sha1": "0de0b7ecbbfa0e12c35b513abc6ff05356f0fcde",
+      "sha256": "dd7aa8676298dbf2add46a63574595416285de92d750e5fd9d7e12b7bda994a2"
+    },
+    "inode": "34373",
+    "mode": [
+      "rw-r--r--"
+    ],
+    "mtime": "2026-11-05T13:54:15.000Z",
+    "name": "note.php",
+    "owner": "www-data",
+    "path": "/var/www/html/uploads/note.php",
+    "size": 28,
+    "uid": "33"
+  },
+  "related": {
+    "hash": [
+      "e0effc9fae7558d688562abd3410d7a4",
+      "0de0b7ecbbfa0e12c35b513abc6ff05356f0fcde",
+      "dd7aa8676298dbf2add46a63574595416285de92d750e5fd9d7e12b7bda994a2"
+    ],
+    "user": [
+      "www-data"
+    ]
+  },
+  "wazuh": {
+    "event": {
+      "id": "4fa9e13e-8bcb-4f43-9065-37d7abc3fd48"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/wazuh-fim/0"
+      ],
+      "name": "wazuh-fim"
+    },
+    "protocol": {
+      "location": "syscheck",
+      "queue": 56
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

@@ -1,0 +1,662 @@
+[
+ {
+  "name": "exec_discovery_id",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "id"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: discovery command"
+  ]
+ },
+ {
+  "name": "exec_discovery_node_uname",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "uname -a"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_node"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: discovery command"
+  ]
+ },
+ {
+  "name": "exec_shell_injection",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "sh -c -- ping -c 1 -W 1 127.0.0.1;id"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: shell"
+  ]
+ },
+ {
+  "name": "exec_shell_node",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "/bin/sh -c ping -c 1 -W 1 127.0.0.1;uname -a"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_node"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: shell"
+  ]
+ },
+ {
+  "name": "exec_network_tool_curl",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "curl -s http://127.0.0.1/ -o /dev/null"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: network or transfer tool"
+  ]
+ },
+ {
+  "name": "exec_base64_command_line",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "sh -c -- ping -c 1 -W 1 127.0.0.1;echo aWQ= | base64 -d | sh"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: base64-decoded command line"
+  ]
+ },
+ {
+  "name": "exec_base64_binary",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.name": "base64"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: base64 decoding"
+  ]
+ },
+ {
+  "name": "exec_reverse_shell_bash",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "bash -c bash -i >& /dev/tcp/127.0.0.1/9 0>&1"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: reverse shell"
+  ]
+ },
+ {
+  "name": "exec_reverse_shell_parent_sh",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "sh -c -- ping -c 1 -W 1 127.0.0.1;bash -c 'bash -i >& /dev/tcp/127.0.0.1/9 0>&1'"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: reverse shell"
+  ]
+ },
+ {
+  "name": "exec_netcat_e",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "nc -e /bin/true 127.0.0.1 9"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: netcat with command execution flag"
+  ]
+ },
+ {
+  "name": "exec_inline_python",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "python3 -c print(1)"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: inline code"
+  ]
+ },
+ {
+  "name": "exec_script_interpreter",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "python3 /dev/null"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: script interpreter"
+  ]
+ },
+ {
+  "name": "neg_php_mail",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "sh -c -- /usr/sbin/sendmail -t -i"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": []
+ },
+ {
+  "name": "neg_php_mail_sender",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "sh -c -- /usr/sbin/sendmail -t -i -fnoreply@example.com"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": []
+ },
+ {
+  "name": "exec_php_mail_injected",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "sh -c -- /usr/sbin/sendmail -t -i -fx@example.com\\;id"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: shell"
+  ]
+ },
+ {
+  "name": "neg_ping_by_app",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "process.command_line": "ping -c 1 -W 1 127.0.0.1"
+      }
+     },
+     {
+      "term": {
+       "rule.name": "web_exec_php"
+      }
+     },
+     {
+      "term": {
+       "event.outcome": "success"
+      }
+     }
+    ]
+   }
+  },
+  "expect": []
+ },
+ {
+  "name": "web_shell_path_in_request",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "url.original": "/ping.php?host=127.0.0.1%3B/bin/sh%20-c%20id"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "apache-http"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: command execution payload"
+  ]
+ },
+ {
+  "name": "web_function_in_request",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "url.original": "/ping.php?x=system%28id%29"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "apache-http"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: command execution payload"
+  ]
+ },
+ {
+  "name": "web_cmd_parameter",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "url.original": "/shell.php?cmd=ls"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "apache-http"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: request with command-style parameter"
+  ]
+ },
+ {
+  "name": "web_upload_dir_php",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "url.original": "/uploads/note.php"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "apache-http"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: successful request to PHP script in upload directory"
+  ]
+ },
+ {
+  "name": "neg_web_benign",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "url.original": "/ping.php?host=127.0.0.1"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "apache-http"
+      }
+     }
+    ]
+   }
+  },
+  "expect": []
+ },
+ {
+  "name": "fim_php_in_webroot",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "file.path": "/var/www/html/uploads/note.php"
+      }
+     },
+     {
+      "term": {
+       "event.action": "created"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "wazuh-fim"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: new PHP script in webroot"
+  ]
+ },
+ {
+  "name": "neg_fim_php_modified",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "file.path": "/var/www/html/uploads/note.php"
+      }
+     },
+     {
+      "term": {
+       "event.action": "modified"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "wazuh-fim"
+      }
+     }
+    ]
+   }
+  },
+  "expect": []
+ },
+ {
+  "name": "fim_htaccess",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "file.path": "/var/www/html/uploads/.htaccess"
+      }
+     },
+     {
+      "term": {
+       "event.action": "created"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "wazuh-fim"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: PHP execution config"
+  ]
+ },
+ {
+  "name": "fim_js_in_node_app",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "file.path": "/opt/nodeapp/lab-marker.js"
+      }
+     },
+     {
+      "term": {
+       "event.action": "created"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "wazuh-fim"
+      }
+     }
+    ]
+   }
+  },
+  "expect": [
+   "Web-to-shell: new JavaScript file"
+  ]
+ },
+ {
+  "name": "neg_fim_deleted",
+  "capture": {
+   "bool": {
+    "filter": [
+     {
+      "term": {
+       "file.path": "/opt/nodeapp/lab-marker.js"
+      }
+     },
+     {
+      "term": {
+       "event.action": "deleted"
+      }
+     },
+     {
+      "term": {
+       "wazuh.integration.name": "wazuh-fim"
+      }
+     }
+    ]
+   }
+  },
+  "expect": []
+ }
+]

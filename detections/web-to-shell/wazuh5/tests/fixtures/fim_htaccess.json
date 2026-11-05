@@ -1,0 +1,72 @@
+{
+  "@timestamp": "2026-11-05T14:06:56.652893634Z",
+  "data_stream": {
+    "dataset": "wazuh.fim",
+    "type": "logs"
+  },
+  "event": {
+    "action": "created",
+    "category": [
+      "file"
+    ],
+    "created": "2026-11-05T14:06:50.323Z",
+    "dataset": "wazuh.fim",
+    "kind": "event",
+    "outcome": "success",
+    "reason": "realtime",
+    "type": [
+      "creation"
+    ]
+  },
+  "file": {
+    "device": "2049",
+    "directory": "/var/www/html/uploads",
+    "gid": "0",
+    "group": "root",
+    "hash": {
+      "md5": "d268a0f238f04ec5c5f06b6d611a349a",
+      "sha1": "746ab12c91abf2cbd3942f7fac7dba4775d93b64",
+      "sha256": "0d24b82e7102e19c4f82e4571e0608332e330acc916be302b36773465baa7395"
+    },
+    "inode": "263512",
+    "mode": [
+      "rw-r--r--"
+    ],
+    "mtime": "2026-11-05T14:06:50.000Z",
+    "name": ".htaccess",
+    "owner": "root",
+    "path": "/var/www/html/uploads/.htaccess",
+    "size": 37,
+    "uid": "0"
+  },
+  "related": {
+    "hash": [
+      "d268a0f238f04ec5c5f06b6d611a349a",
+      "746ab12c91abf2cbd3942f7fac7dba4775d93b64",
+      "0d24b82e7102e19c4f82e4571e0608332e330acc916be302b36773465baa7395"
+    ],
+    "user": [
+      "root"
+    ]
+  },
+  "wazuh": {
+    "event": {
+      "id": "75cb13ef-4f44-4c26-bed5-77f460252cea"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/wazuh-fim/0"
+      ],
+      "name": "wazuh-fim"
+    },
+    "protocol": {
+      "location": "syscheck",
+      "queue": 56
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

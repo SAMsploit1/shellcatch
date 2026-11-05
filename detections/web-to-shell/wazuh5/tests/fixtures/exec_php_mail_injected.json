@@ -1,0 +1,76 @@
+{
+  "@timestamp": "2026-11-05T14:06:46.605839372Z",
+  "event": {
+    "action": "started",
+    "category": [
+      "process"
+    ],
+    "code": "SYSCALL",
+    "kind": "event",
+    "outcome": "success",
+    "sequence": 627,
+    "start": "2026-11-05T14:06:36.203000Z",
+    "type": [
+      "start"
+    ]
+  },
+  "host": {
+    "architecture": "x86_64"
+  },
+  "process": {
+    "args": [
+      "sh",
+      "-c",
+      "--",
+      "/usr/sbin/sendmail -t -i -fx@example.com\\;id"
+    ],
+    "args_count": 4,
+    "command_line": "sh -c -- /usr/sbin/sendmail -t -i -fx@example.com\\;id",
+    "executable": "/usr/bin/dash",
+    "exit_code": 0,
+    "name": "sh",
+    "parent": {
+      "pid": 13036
+    },
+    "pid": 13037,
+    "title": "sh -c -- /usr/sbin/sendmail -t -i -fx@example.com\\;id",
+    "working_directory": "/home/labadmin"
+  },
+  "rule": {
+    "name": "web_exec_php"
+  },
+  "user": {
+    "effective": {
+      "group": {
+        "id": "33"
+      },
+      "id": "33",
+      "name": "www-data"
+    },
+    "group": {
+      "id": "33"
+    },
+    "id": "1000",
+    "name": "labadmin"
+  },
+  "wazuh": {
+    "event": {
+      "id": "e55dc0a0-c901-468b-a87a-5929a2f69732"
+    },
+    "integration": {
+      "category": "system-activity",
+      "decoders": [
+        "decoder/core-wazuh-message/0",
+        "decoder/auditd/0"
+      ],
+      "name": "auditd"
+    },
+    "protocol": {
+      "location": "/var/log/audit/audit.log",
+      "queue": 49
+    },
+    "space": {
+      "name": "standard"
+    }
+  }
+}

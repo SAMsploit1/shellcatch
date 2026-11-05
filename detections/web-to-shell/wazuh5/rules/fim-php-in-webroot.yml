@@ -1,0 +1,41 @@
+# Migrated from 4.x rule 100570 (level 10 -> high).
+# 4.x chained off stock 554 (file added). In 5.0 that is event.action: created
+# on events from the wazuh-fim integration. Note that the stock wazuh-fim
+# integration already raises a low "File created" finding for any monitored
+# path; this rule ranks a new PHP file under the webroot higher.
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: new PHP script in webroot: {{file.path}}"
+  author: SAMspl0it
+  description: A PHP-executable file was created under /var/www.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: file_event
+  service: fim
+detection:
+  condition: fim and webroot and php
+  fim:
+    wazuh.integration.name: wazuh-fim
+    event.action: created
+  webroot:
+    file.path|startswith: /var/www/
+  # Case-insensitive by character class: |re|i is documented but rejected on 5.0.0-rc2.
+  php:
+    file.extension|re: "^([pP][hH][pP][0-9]?|[pP][hH][tT][mM][lL]|[pP][hH][aA][rR]|[pP][hH][tT]|[pP][hH][pP][sS])$"
+mitre:
+  tactic:
+    id: [TA0003]
+    name: [Persistence]
+  technique:
+    id: [T1505]
+    name: [Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.persistence, attack.t1505.003, shellcatch.drop]
+falsepositives:
+  - Deployments and CMS plugin installs. Correlate with your release window.

@@ -1,0 +1,120 @@
+{
+ "type": "monitor",
+ "monitor_type": "bucket_level_monitor",
+ "name": "web-to-shell: webshell dropped then executed",
+ "enabled": true,
+ "schedule": {
+  "period": {
+   "interval": 1,
+   "unit": "MINUTES"
+  }
+ },
+ "inputs": [
+  {
+   "search": {
+    "indices": [
+     "wazuh-findings-v5-*"
+    ],
+    "query": {
+     "size": 0,
+     "query": {
+      "bool": {
+       "filter": [
+        {
+         "terms": {
+          "wazuh.rule.tags": [
+           "shellcatch.drop",
+           "shellcatch.activity",
+           "shellcatch.spawn"
+          ]
+         }
+        },
+        {
+         "range": {
+          "@timestamp": {
+           "gte": "{{period_end}}||-10m",
+           "lte": "{{period_end}}",
+           "format": "epoch_millis"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "aggregations": {
+      "by": {
+       "composite": {
+        "size": 1000,
+        "sources": [
+         {
+          "agent": {
+           "terms": {
+            "field": "wazuh.agent.id"
+           }
+          }
+         }
+        ]
+       },
+       "aggregations": {
+        "drop": {
+         "filter": {
+          "term": {
+           "wazuh.rule.tags": "shellcatch.drop"
+          }
+         },
+         "aggregations": {
+          "first": {
+           "min": {
+            "field": "@timestamp"
+           }
+          }
+         }
+        },
+        "exec": {
+         "filter": {
+          "terms": {
+           "wazuh.rule.tags": [
+            "shellcatch.activity",
+            "shellcatch.spawn"
+           ]
+          }
+         },
+         "aggregations": {
+          "last": {
+           "max": {
+            "field": "@timestamp"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ],
+ "triggers": [
+  {
+   "bucket_level_trigger": {
+    "name": "web code file created, then a web runtime spawned a process, same host, 10 minutes",
+    "severity": "1",
+    "condition": {
+     "buckets_path": {
+      "drops": "drop>_count",
+      "execs": "exec>_count",
+      "drop_first": "drop>first",
+      "exec_last": "exec>last"
+     },
+     "parent_bucket_path": "by",
+     "script": {
+      "source": "params.drops > 0 && params.execs > 0 && params.exec_last > params.drop_first",
+      "lang": "painless"
+     }
+    },
+    "actions": []
+   }
+  }
+ ],
+ "_comment": "Ordered sequence on one agent: a shellcatch.drop finding (new PHP/JS file, .htaccess) followed by a shellcatch.activity/spawn finding. 4.x had no ordered cross-source sequence; if_matched_sid only checks that a match happened earlier."
+}

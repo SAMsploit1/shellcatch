@@ -1,0 +1,35 @@
+# Migrated from 4.x rule 100540 (level 12 -> high).
+enabled: true
+status: experimental
+level: high
+metadata:
+  title: "Web-to-shell: base64 decoding by web runtime"
+  author: SAMspl0it
+  description: The base64 binary was executed by a web service account.
+  references:
+    - https://github.com/SAMsploit1/shellcatch
+logsource:
+  product: web-to-shell
+  category: process_creation
+  service: auditd
+detection:
+  condition: web_exec and base64
+  web_exec:
+    wazuh.integration.name: auditd
+    event.action: started
+    rule.name: [web_exec_php, web_exec_node]
+  base64:
+    process.name: base64
+mitre:
+  tactic:
+    id: [TA0005, TA0003]
+    name: [Defense Evasion, Persistence]
+  technique:
+    id: [T1140, T1505]
+    name: [Deobfuscate/Decode Files or Information, Server Software Component]
+  subtechnique:
+    id: [T1505.003]
+    name: [Web Shell]
+tags: [attack.defense-evasion, attack.t1140, attack.t1505.003, shellcatch.activity]
+falsepositives:
+  - Applications that shell out to base64.
