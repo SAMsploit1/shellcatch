@@ -12,7 +12,7 @@ Site: https://samsploit1.github.io/shellcatch/
 | 2026-10-27 | Revision | Ambassador review feedback addressed (9 points) | [details](#review-feedback--2026-10-27) | Pushed 2026-10-27; site live; PR #122 synced (5c0090e, runtests 40/40) |
 | 2026-10-24 | Upstream PR | Web-to-shell integration for `wazuh/integrations` | [PR #122](https://github.com/wazuh/integrations/pull/122) | Open — awaiting review |
 | 2026-11-05 | Detection content + write-up | web-to-shell migrated to Wazuh 5.0 (Sigma rules, correlation monitors, tested on rc2) | [detections/web-to-shell/wazuh5](detections/web-to-shell/wazuh5) · [draft post](content/blog-wazuh5-migration.md) | Built and validated on a live 5.0.0-rc2 lab; not yet committed or published |
-| 2026-11-06 | Ops content | wazuh-selfmon: Wazuh self-monitoring pack (probe, canary, out-of-band alerts, rules 100800-100819) | [detections/wazuh-selfmon](detections/wazuh-selfmon) | Built; 22/22 logtest, 7 fault scenarios reproduced on Azure 4.14.9; not committed; write-up drafted at content/blog-wazuh-selfmon.md (byline TBD) |
+| 2026-11-06 | Ops content | wazuh-selfmon: Wazuh self-monitoring pack (probe, canary, out-of-band alerts, rules 100800-100819) | [detections/wazuh-selfmon](detections/wazuh-selfmon) | Built; 22/22 logtest, 7 fault scenarios reproduced on Azure 4.14.9; Published 2026-11-06 — [post](https://samsploit1.github.io/posts/wazuh-selfmon.html) · repo 35f653b |
 
 ---
 

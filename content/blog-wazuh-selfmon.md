@@ -1,6 +1,6 @@
 # Everything said "active": making Wazuh notice when Wazuh is broken
 
-*By [BYLINE: TBD] · Draft, November 2026*
+*By SAMspl0it · Published 6 November 2026*
 
 The worst outage I've worked on didn't page anyone. On a production Wazuh
 deployment, the OOM killer took `wazuh-db`, and the cgroup kill took the rest
