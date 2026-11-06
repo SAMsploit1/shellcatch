@@ -1,0 +1,7 @@
+<!-- Add inside <ossec_config> on the manager -->
+<localfile>
+  <log_format>json</log_format>
+  <location>/var/log/wazuh-selfmon/selfmon.json</location>
+  <!-- Read what the probe wrote while the manager was down -->
+  <only-future-events>no</only-future-events>
+</localfile>

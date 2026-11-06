@@ -1,0 +1,659 @@
+#!/usr/bin/env python3
+"""wazuh-selfmon: a self-monitoring probe for a Wazuh 4.x manager + indexer host.
+
+Runs from its own systemd timer, outside wazuh-manager's process tree, so it
+keeps working when the manager is the thing that died. Each run:
+
+  * checks the manager's daemons by process (not by unit state), wazuh-db
+    memory, analysisd/remoted drop counters, UDP receive-buffer errors, local
+    disk, the indexer's health, disk watermarks, write blocks and ISM failures;
+  * writes one JSON line per finding to a log file that the manager's own
+    logcollector reads (rules 100800-100819 turn them into alerts);
+  * emits a "canary" record every run and, on the next run, checks the canary
+    actually reached the indexer, so a stall anywhere in
+    logcollector -> analysisd -> alerts.json -> filebeat -> indexer is caught
+    and the broken stage named;
+  * sends CRITICAL findings out-of-band (webhook) because if Wazuh is down,
+    an alert raised through Wazuh goes nowhere;
+  * optionally repairs a manager whose unit is "active" but whose daemons are
+    missing, rate-limited so it cannot become a restart loop.
+
+Standard library only. Configuration: /etc/wazuh-selfmon.conf (KEY=VALUE).
+"""
+
+import argparse
+import json
+import os
+import shutil
+import socket
+import ssl
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+VERSION = "1.0.0"
+
+DEFAULTS = {
+    "OSSEC_DIR": "/var/ossec",
+    "OUTPUT_FILE": "/var/log/wazuh-selfmon/selfmon.json",
+    "STATE_FILE": "/var/lib/wazuh-selfmon/state.json",
+    # Daemons that must be running whenever wazuh-manager.service is active.
+    "EXPECTED_DAEMONS": "wazuh-analysisd wazuh-remoted wazuh-db wazuh-modulesd "
+                        "wazuh-logcollector wazuh-execd wazuh-syscheckd "
+                        "wazuh-monitord wazuh-authd wazuh-apid",
+    # wazuh-db resident memory, MB. 0 disables a tier.
+    "WDB_RSS_WARN_MB": "4096",
+    "WDB_RSS_HIGH_MB": "8192",
+    "WDB_RSS_CRIT_MB": "12288",
+    # analysisd: share of received events dropped since the previous run (%).
+    "DROP_WARN_PCT": "1",
+    "DROP_HIGH_PCT": "10",
+    "DROP_CRIT_PCT": "50",
+    # analysisd: highest *_queue_usage (0-1).
+    "QUEUE_WARN": "0.70",
+    "QUEUE_HIGH": "0.90",
+    # Kernel UDP receive-buffer errors since the previous run (syslog over UDP).
+    "UDP_RCVBUF_WARN": "100",
+    "UDP_RCVBUF_HIGH": "10000",
+    # Local disk holding OSSEC_DIR (%).
+    "DISK_WARN_PCT": "80",
+    "DISK_HIGH_PCT": "90",
+    "DISK_CRIT_PCT": "95",
+    # Indexer access. Client certificate (default all-in-one paths) or basic auth.
+    "INDEXER_URL": "https://127.0.0.1:9200",
+    "INDEXER_CA": "/etc/wazuh-indexer/certs/root-ca.pem",
+    "INDEXER_CERT": "/etc/wazuh-indexer/certs/admin.pem",
+    "INDEXER_KEY": "/etc/wazuh-indexer/certs/admin-key.pem",
+    "INDEXER_USER": "",
+    "INDEXER_PASS": "",
+    "INDEXER_TIMEOUT": "10",
+    "ALERTS_INDEX": "wazuh-alerts-*",
+    # Canary: the previous run's canary must be in the indexer within this many seconds.
+    "CANARY_MAX_AGE": "600",
+    "CANARY_RULE_ID": "100801",
+    # Re-emit an unchanged non-OK finding at most this often (minutes).
+    "REPEAT_MIN": "60",
+    # Out-of-band notification. Generic JSON webhook; ntfy-style topics also work.
+    "NOTIFY_URL": "",
+    "NOTIFY_MIN": "critical",      # warn | high | critical
+    "NOTIFY_FORMAT": "json",       # json | text (text = plain body, e.g. ntfy)
+    # Dead man's switch: GET this URL after every run that found nothing critical.
+    "HEARTBEAT_URL": "",
+    # Self-repair: start missing daemons / a stopped manager. Off by default.
+    "REMEDIATE": "no",
+    "REMEDIATE_MAX_PER_HOUR": "3",
+    # Checks to skip, space separated (e.g. "indexer.ism udp.rcvbuf").
+    "DISABLE": "",
+}
+
+SEVERITY = {"ok": 0, "warn": 1, "high": 2, "critical": 3}
+
+
+def load_config(path):
+    cfg = dict(DEFAULTS)
+    if path and os.path.exists(path):
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip().strip('"').strip("'")
+    return cfg
+
+
+def now_iso(ts=None):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts or time.time()))
+
+
+def tier(value, warn, high, crit=None):
+    """Map a number onto ok/warn/high/critical. A threshold of 0 is disabled."""
+    for name, limit in (("critical", crit), ("high", high), ("warn", warn)):
+        if limit is not None and float(limit) > 0 and value >= float(limit):
+            return name
+    return "ok"
+
+
+# --------------------------------------------------------------------------- #
+# Host-side helpers
+# --------------------------------------------------------------------------- #
+
+def unit_state(unit):
+    try:
+        out = subprocess.run(["systemctl", "is-active", unit], capture_output=True,
+                             text=True, timeout=10)
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+
+
+def running_daemons():
+    """Return {daemon_name: pid} for wazuh-* processes, found through /proc.
+
+    /proc/<pid>/comm is cut at 15 characters (wazuh-logcollector -> wazuh-logcollec),
+    so the name is taken from argv. wazuh-apid runs as python + wazuh_apid.py.
+    """
+    found = {}
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                argv = [a.decode(errors="replace") for a in fh.read().split(b"\0") if a]
+        except OSError:
+            continue
+        for arg in argv[:2]:
+            base = os.path.basename(arg)
+            if base.endswith(".py"):
+                base = base[:-3].replace("_", "-")
+            if base.startswith("wazuh-"):
+                found.setdefault(base, int(pid))
+                break
+    return found
+
+
+def rss_mb(pid):
+    try:
+        with open(f"/proc/{pid}/status") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) // 1024
+    except OSError:
+        pass
+    return None
+
+
+def read_state_file(path):
+    vals = {}
+    try:
+        with open(path) as fh:
+            for line in fh:
+                if "=" in line and not line.startswith("#"):
+                    k, v = line.strip().split("=", 1)
+                    vals[k] = v.strip("'")
+    except OSError:
+        return None
+    return vals
+
+
+def udp_rcvbuf_errors():
+    try:
+        with open("/proc/net/snmp") as fh:
+            rows = [l.split() for l in fh if l.startswith("Udp:")]
+        hdr, val = rows[0], rows[1]
+        return int(val[hdr.index("RcvbufErrors")])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Indexer client
+# --------------------------------------------------------------------------- #
+
+class Indexer:
+    def __init__(self, cfg):
+        self.url = cfg["INDEXER_URL"].rstrip("/")
+        self.timeout = float(cfg["INDEXER_TIMEOUT"])
+        self.ctx = ssl.create_default_context()
+        if cfg["INDEXER_CA"] and os.path.exists(cfg["INDEXER_CA"]):
+            self.ctx.load_verify_locations(cfg["INDEXER_CA"])
+            # All-in-one certs are issued for the node name, not 127.0.0.1.
+            self.ctx.check_hostname = False
+        self.headers = {"Content-Type": "application/json"}
+        if cfg["INDEXER_USER"]:
+            import base64
+            tok = base64.b64encode(f'{cfg["INDEXER_USER"]}:{cfg["INDEXER_PASS"]}'.encode())
+            self.headers["Authorization"] = "Basic " + tok.decode()
+        elif os.path.exists(cfg["INDEXER_CERT"]) and os.path.exists(cfg["INDEXER_KEY"]):
+            self.ctx.load_cert_chain(cfg["INDEXER_CERT"], cfg["INDEXER_KEY"])
+
+    def req(self, method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        r = urllib.request.Request(self.url + path, data=data, method=method,
+                                   headers=self.headers)
+        with urllib.request.urlopen(r, context=self.ctx, timeout=self.timeout) as resp:
+            return json.loads(resp.read() or b"null")
+
+
+# --------------------------------------------------------------------------- #
+# Checks. Each returns a list of findings: dicts with check/status/message/...
+# --------------------------------------------------------------------------- #
+
+def F(check, status, message, **extra):
+    d = {"check": check, "status": status, "message": message}
+    d.update(extra)
+    return d
+
+
+def check_manager(cfg, ctx):
+    state = unit_state("wazuh-manager")
+    ctx["manager_unit"] = state
+    if state != "active":
+        return [F("manager.unit", "critical",
+                  f"wazuh-manager.service is {state}: no events are being analysed",
+                  unit_state=state)]
+    out = [F("manager.unit", "ok", "wazuh-manager.service is active", unit_state=state)]
+    running = running_daemons()
+    ctx["daemons"] = running
+    expected = cfg["EXPECTED_DAEMONS"].split()
+    missing = [d for d in expected if d not in running]
+    ctx["missing_daemons"] = missing
+    if missing and len(missing) == len(expected):
+        out.append(F("manager.daemons", "critical",
+                     "wazuh-manager is down: none of its daemons are running, yet the unit "
+                     "reports active. The stock unit uses RemainAfterExit=yes, so systemd "
+                     "will neither notice nor restart it", missing=" ".join(missing)))
+    elif missing:
+        sev = "critical" if any(d in ("wazuh-analysisd", "wazuh-db", "wazuh-remoted",
+                                      "wazuh-logcollector") for d in missing) else "high"
+        out.append(F("manager.daemons", sev,
+                     "wazuh-manager.service is active but these daemons are not running: "
+                     + ", ".join(missing), missing=" ".join(missing)))
+    else:
+        out.append(F("manager.daemons", "ok", f"all {len(expected)} expected daemons running"))
+    return out
+
+
+def check_wdb_memory(cfg, ctx):
+    pid = ctx.get("daemons", {}).get("wazuh-db")
+    if not pid:
+        return []  # absence is reported by manager.daemons
+    mb = rss_mb(pid)
+    if mb is None:
+        return [F("wazuh-db.memory", "warn", "could not read wazuh-db RSS")]
+    st = tier(mb, cfg["WDB_RSS_WARN_MB"], cfg["WDB_RSS_HIGH_MB"], cfg["WDB_RSS_CRIT_MB"])
+    return [F("wazuh-db.memory", st, f"wazuh-db resident memory is {mb} MB", rss_mb=mb)]
+
+
+def check_analysisd(cfg, ctx, prev):
+    vals = read_state_file(os.path.join(cfg["OSSEC_DIR"], "var/run/wazuh-analysisd.state"))
+    if vals is None or ctx.get("manager_unit") != "active":
+        return []
+    out = []
+    rec, drop = int(vals.get("events_received", 0)), int(vals.get("events_dropped", 0))
+    p = prev.get("analysisd")
+    apid = ctx.get("daemons", {}).get("wazuh-analysisd")
+    ctx["state"]["analysisd"] = {"received": rec, "dropped": drop, "t": time.time(), "pid": apid}
+    # Counters reset when analysisd restarts: only diff against the same process.
+    if p and p.get("pid") == apid and rec >= p["received"] and drop >= p["dropped"]:
+        d_rec, d_drop = rec - p["received"], drop - p["dropped"]
+        pct = (100.0 * d_drop / d_rec) if d_rec else 0.0
+        st = tier(pct, cfg["DROP_WARN_PCT"], cfg["DROP_HIGH_PCT"], cfg["DROP_CRIT_PCT"])
+        out.append(F("analysisd.drops", st,
+                     f"analysisd dropped {d_drop} of {d_rec} events ({pct:.1f}%) since the last run",
+                     received=d_rec, dropped=d_drop, drop_pct=round(pct, 2)))
+    # else: first run or counters reset by a restart -> no delta yet
+    queues = {k[:-len("_queue_usage")]: float(v) for k, v in vals.items()
+              if k.endswith("_queue_usage")}
+    if queues:
+        name, top = max(queues.items(), key=lambda kv: kv[1])
+        st = tier(top, cfg["QUEUE_WARN"], cfg["QUEUE_HIGH"])
+        out.append(F("analysisd.queues", st,
+                     f"fullest analysisd queue is {name} at {top:.0%}",
+                     queue=name, usage=top))
+    return out
+
+
+def check_remoted(cfg, ctx, prev):
+    vals = read_state_file(os.path.join(cfg["OSSEC_DIR"], "var/run/wazuh-remoted.state"))
+    out = []
+    if vals is not None and ctx.get("manager_unit") == "active":
+        disc = int(vals.get("discarded_count", 0))
+        p = prev.get("remoted")
+        ctx["state"]["remoted"] = {"discarded": disc}
+        if p and disc >= p["discarded"]:
+            d = disc - p["discarded"]
+            st = "high" if d > 0 else "ok"
+            out.append(F("remoted.discarded", st,
+                         f"remoted discarded {d} messages since the last run", discarded=d))
+    errs = udp_rcvbuf_errors()
+    if errs is not None:
+        p = prev.get("udp")
+        ctx["state"]["udp"] = {"rcvbuf": errs}
+        if p and errs >= p["rcvbuf"]:
+            d = errs - p["rcvbuf"]
+            st = tier(d, cfg["UDP_RCVBUF_WARN"], cfg["UDP_RCVBUF_HIGH"])
+            out.append(F("udp.rcvbuf", st,
+                         f"kernel dropped {d} UDP datagrams (receive buffer full) since the "
+                         "last run; syslog over UDP loses these silently", rcvbuf_errors=d))
+    return out
+
+
+def check_local_disk(cfg, ctx):
+    try:
+        du = shutil.disk_usage(cfg["OSSEC_DIR"])
+    except OSError:
+        return []
+    pct = 100.0 * du.used / du.total
+    st = tier(pct, cfg["DISK_WARN_PCT"], cfg["DISK_HIGH_PCT"], cfg["DISK_CRIT_PCT"])
+    return [F("manager.disk", st, f"{cfg['OSSEC_DIR']} filesystem is {pct:.0f}% full",
+              used_pct=round(pct, 1), free_gb=round(du.free / 2**30, 1))]
+
+
+def _pct(value):
+    v = str(value).strip()
+    return float(v[:-1]) if v.endswith("%") else None  # absolute byte watermarks: skip
+
+
+def check_indexer(cfg, ctx, ix):
+    out = []
+    fb = unit_state("filebeat")
+    if fb not in ("active", "unknown"):
+        out.append(F("filebeat.unit", "critical",
+                     f"filebeat is {fb}: alerts are written but never indexed", unit_state=fb))
+    elif fb == "active":
+        # "active" is not proof it ships anything: the canary checks that.
+        out.append(F("filebeat.unit", "ok", "filebeat is active", unit_state=fb))
+    try:
+        health = ix.req("GET", "/_cluster/health")
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        ctx["indexer_ok"] = False
+        return out + [F("indexer.reachable", "critical",
+                        f"indexer unreachable at {cfg['INDEXER_URL']}: {e}")]
+    ctx["indexer_ok"] = True
+    color = health.get("status", "unknown")
+    st = {"green": "ok", "yellow": "warn", "red": "critical"}.get(color, "high")
+    out.append(F("indexer.health", st,
+                 f"cluster is {color}, {health.get('unassigned_shards', '?')} unassigned shards",
+                 cluster_status=color, unassigned=health.get("unassigned_shards")))
+
+    if "indexer.disk" not in ctx["disabled"]:
+        s = ix.req("GET", "/_cluster/settings?include_defaults=true&flat_settings=true")
+        merged = {}
+        for layer in ("defaults", "persistent", "transient"):  # later layers win
+            merged.update(s.get(layer, {}))
+        key = "cluster.routing.allocation.disk.watermark."
+        low = _pct(merged.get(key + "low", "85%"))
+        high = _pct(merged.get(key + "high", "90%"))
+        flood = _pct(merged.get(key + "flood_stage", "95%"))
+        worst = None
+        for node in ix.req("GET", "/_cat/allocation?format=json"):
+            if node.get("disk.percent") in (None, ""):
+                continue
+            pct = float(node["disk.percent"])
+            if worst is None or pct > worst[1]:
+                worst = (node.get("node", "?"), pct)
+        if worst:
+            st = tier(worst[1], low or 0, high or 0, flood or 0)
+            out.append(F("indexer.disk", st,
+                         f"indexer node {worst[0]} disk at {worst[1]:.0f}% "
+                         f"(watermarks low {low}% / high {high}% / flood {flood}%)",
+                         node=worst[0], used_pct=worst[1], flood_pct=flood))
+
+    if "indexer.blocks" not in ctx["disabled"]:
+        blk = ix.req("GET", "/_all/_settings/index.blocks.read_only_allow_delete"
+                     "?expand_wildcards=all")
+        blocked = sorted(i for i, v in blk.items()
+                         if str(v.get("settings", {}).get("index", {}).get("blocks", {})
+                                .get("read_only_allow_delete")).lower() == "true")
+        if blocked:
+            out.append(F("indexer.blocks", "critical",
+                         f"{len(blocked)} indices carry read_only_allow_delete (flood-stage "
+                         f"watermark): writes are rejected. First: {', '.join(blocked[:3])}",
+                         blocked=len(blocked)))
+        else:
+            out.append(F("indexer.blocks", "ok", "no index write blocks"))
+
+    if "indexer.ism" not in ctx["disabled"]:
+        try:
+            ex = ix.req("GET", "/_plugins/_ism/explain/*?size=1000")
+        except urllib.error.HTTPError:
+            ex = {}
+        failed = sorted(i for i, v in ex.items() if isinstance(v, dict)
+                        and (v.get("failed") is True
+                             or (v.get("step") or {}).get("step_status") == "failed"))
+        if failed:
+            out.append(F("indexer.ism", "high",
+                         f"{len(failed)} indices have a failed ISM step; retention is not "
+                         f"running for them (first: {failed[0]}). Fix the cause, then "
+                         "POST _plugins/_ism/retry", failed=len(failed)))
+        else:
+            out.append(F("indexer.ism", "ok", "no failed ISM steps"))
+    return out
+
+
+def check_canary(cfg, ctx, ix, prev):
+    """Did the previous run's canary make it all the way to the indexer?"""
+    p = prev.get("canary")
+    if not p or not ctx.get("indexer_ok"):
+        return []
+    age = time.time() - p["t"]
+    q = {"size": 1, "sort": [{"timestamp": "desc"}], "_source": ["timestamp"],
+         "query": {"bool": {"filter": [
+             {"term": {"rule.id": cfg["CANARY_RULE_ID"]}},
+             {"term": {"data.selfmon.canary": p["id"]}}]}}}
+    try:
+        hits = ix.req("POST", "/" + cfg["ALERTS_INDEX"] + "/_search", q)["hits"]["hits"]
+    except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+        return [F("pipeline.canary", "warn", f"canary search failed: {e}")]
+    if hits:
+        return [F("pipeline.canary", "ok", "previous canary reached the indexer",
+                  canary_age_s=int(age))]
+    if age < float(cfg["CANARY_MAX_AGE"]):
+        ctx["keep_canary"] = True   # not overdue yet; check the same one next run
+        return []
+    stage = locate_canary(cfg, p["id"])
+    return [F("pipeline.canary", "high",
+              f"canary {p['id'][:8]} written {int(age // 60)} min ago is not in "
+              f"{cfg['ALERTS_INDEX']}: {stage}", canary_age_s=int(age), stage=stage)]
+
+
+def locate_canary(cfg, cid):
+    """Find where the canary stopped: in alerts.json (-> filebeat/indexer) or not."""
+    path = os.path.join(cfg["OSSEC_DIR"], "logs/alerts/alerts.json")
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 16 * 2**20))
+            if cid.encode() in fh.read():
+                return ("the manager wrote it to alerts.json, so the break is after "
+                        "the manager: filebeat or the indexer")
+    except OSError:
+        pass
+    return ("it never reached alerts.json, so the break is inside the manager: "
+            "logcollector or analysisd (or the rule is not loaded)")
+
+
+# --------------------------------------------------------------------------- #
+# Remediation, notification, output
+# --------------------------------------------------------------------------- #
+
+def in_manager_cgroup(cmd):
+    """Run cmd inside wazuh-manager.service's cgroup.
+
+    This probe is a oneshot systemd service. Anything it starts lives in its
+    cgroup, and systemd kills that cgroup when the probe exits: a wazuh-db
+    started by a plain `wazuh-control start` is SIGTERMed ~seconds later.
+    Moving the shell into the manager's cgroup first puts the restarted
+    daemons where systemd (and a later stop or OOM kill) expects them.
+    """
+    try:
+        cg = subprocess.run(["systemctl", "show", "-p", "ControlGroup", "--value",
+                             "wazuh-manager"], capture_output=True, text=True,
+                            timeout=10).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        cg = ""
+    procs = f"/sys/fs/cgroup{cg}/cgroup.procs"
+    if cg and os.path.exists(procs):
+        return ["sh", "-c", f'echo $$ > {procs} && exec "$@"', "sh"] + cmd
+    # No cgroup v2 path: at least escape our own unit's cgroup.
+    return ["systemd-run", "--scope", "--quiet", "--unit",
+            f"wazuh-selfmon-repair-{int(time.time())}"] + cmd
+
+
+def remediate(cfg, ctx, state):
+    if cfg["REMEDIATE"].lower() not in ("yes", "true", "1"):
+        return []
+    hist = [t for t in state.get("remediations", []) if time.time() - t < 3600]
+    if len(hist) >= int(cfg["REMEDIATE_MAX_PER_HOUR"]):
+        return [F("remediation", "critical",
+                  f"{len(hist)} repairs in the last hour; not trying again. "
+                  "Something keeps killing the manager: investigate by hand",
+                  action="none", attempts=len(hist))]
+    ctl = os.path.join(cfg["OSSEC_DIR"], "bin/wazuh-control")
+    if ctx.get("manager_unit") in ("inactive", "failed"):
+        action, cmd = "systemctl start wazuh-manager", ["systemctl", "start", "wazuh-manager"]
+    elif ctx.get("missing_daemons"):
+        # Start only what is missing. A full restart can hang on a daemon that
+        # crashes during shutdown and leave things worse than before.
+        action, cmd = "wazuh-control start", [ctl, "start"]
+    else:
+        return []
+    hist.append(time.time())
+    state["remediations"] = hist
+    if cmd[0] == ctl:
+        cmd = in_manager_cgroup(cmd)
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return [F("remediation", "critical", f"{action} failed: {e}", action=action)]
+    time.sleep(10)
+    still = [d for d in cfg["EXPECTED_DAEMONS"].split() if d not in running_daemons()]
+    if unit_state("wazuh-manager") == "active" and not still:
+        return [F("remediation", "high", f"ran '{action}'; all daemons are running again",
+                  action=action, result="recovered")]
+    return [F("remediation", "critical",
+              f"ran '{action}' but still missing: {', '.join(still) or 'manager unit'}",
+              action=action, result="failed")]
+
+
+def notify(cfg, findings, host):
+    url = cfg["NOTIFY_URL"]
+    floor = SEVERITY.get(cfg["NOTIFY_MIN"], 3)
+    todo = [f for f in findings if SEVERITY[f["status"]] >= floor or f.get("recovered")]
+    if not url or not todo:
+        return
+    for f in todo:
+        title = f"[{'RECOVERED' if f.get('recovered') else f['status'].upper()}] {host} {f['check']}"
+        if cfg["NOTIFY_FORMAT"] == "text":
+            body, hdrs = f"{title}\n{f['message']}".encode(), {"Title": title}
+        else:
+            body = json.dumps({"host": host, "title": title, **f}).encode()
+            hdrs = {"Content-Type": "application/json"}
+        try:
+            urllib.request.urlopen(urllib.request.Request(url, data=body, headers=hdrs,
+                                                          method="POST"), timeout=10)
+        except (urllib.error.URLError, OSError) as e:
+            print(f"wazuh-selfmon: notify failed: {e}", file=sys.stderr)
+
+
+def write_records(cfg, records, dry_run):
+    lines = [json.dumps({"selfmon": r}, sort_keys=True) for r in records]
+    if dry_run:
+        print("\n".join(lines))
+        return
+    os.makedirs(os.path.dirname(cfg["OUTPUT_FILE"]), exist_ok=True)
+    with open(cfg["OUTPUT_FILE"], "a") as fh:
+        for line in lines:
+            fh.write(line + "\n")
+
+
+def load_state(path):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(path, state):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(state, fh)
+    os.replace(tmp, path)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("-c", "--config", default="/etc/wazuh-selfmon.conf")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print records to stdout; do not write output, state or notify")
+    ap.add_argument("--all", action="store_true",
+                    help="emit every finding, including unchanged OK ones")
+    ap.add_argument("--version", action="version", version=VERSION)
+    args = ap.parse_args()
+
+    cfg = load_config(args.config)
+    host = socket.gethostname()
+    prev = load_state(cfg["STATE_FILE"])
+    disabled = set(cfg["DISABLE"].split())
+    ctx = {"state": {}, "disabled": disabled}
+    run_id = uuid.uuid4().hex
+
+    findings = []
+    findings += check_manager(cfg, ctx)
+    findings += check_wdb_memory(cfg, ctx)
+    findings += check_analysisd(cfg, ctx, prev)
+    findings += check_remoted(cfg, ctx, prev)
+    findings += check_local_disk(cfg, ctx)
+    ix = Indexer(cfg)
+    try:
+        findings += check_indexer(cfg, ctx, ix)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        findings.append(F("indexer.query", "warn", f"indexer check failed: {e}"))
+    findings += check_canary(cfg, ctx, ix, prev)
+    findings = [f for f in findings if f["check"] not in disabled]
+    findings += remediate(cfg, ctx, prev) if not args.dry_run else []
+
+    # Only emit what changed, plus a reminder for long-lasting problems.
+    last = prev.get("last", {})
+    repeat = float(cfg["REPEAT_MIN"]) * 60
+    emit = []
+    # Checks that produced nothing this run (no delta yet, canary not overdue,
+    # indexer unreachable) keep their previous state, so a later recovery is
+    # still reported as one.
+    new_last = {k: v for k, v in last.items() if k != "remediation"}
+    for f in findings:
+        f.update(host=host, run_id=run_id, observed_at=now_iso())
+        before = last.get(f["check"], {"status": "ok", "t": 0})
+        new_last[f["check"]] = {"status": f["status"],
+                                "t": before["t"] if before["status"] == f["status"]
+                                else time.time()}
+        if f["status"] == "ok":
+            if before["status"] != "ok":
+                f["recovered"] = True
+                f["previous_status"] = before["status"]
+                emit.append(f)
+            elif args.all:
+                emit.append(f)
+        elif before["status"] != f["status"] or time.time() - before.get("emitted", 0) >= repeat:
+            emit.append(f)
+            new_last[f["check"]]["emitted"] = time.time()
+        else:
+            new_last[f["check"]]["emitted"] = before.get("emitted", 0)
+        if f["check"] == "remediation":
+            new_last.pop("remediation", None)   # every repair attempt is news
+
+    # The canary: one record per run that must show up in the indexer.
+    if ctx.get("keep_canary"):
+        canary = prev["canary"]
+    else:
+        canary = {"id": uuid.uuid4().hex, "t": time.time()}
+        emit.append({"check": "canary", "status": "ok", "canary": canary["id"],
+                     "message": "self-monitor heartbeat", "host": host, "run_id": run_id,
+                     "observed_at": now_iso(),
+                     "worst": max((f["status"] for f in findings),
+                                  key=lambda s: SEVERITY[s], default="ok")})
+
+    write_records(cfg, emit, args.dry_run)
+    if args.dry_run:
+        return 0
+    notify(cfg, [f for f in emit if f["check"] != "canary"], host)
+    state = dict(ctx["state"])
+    state.update(last=new_last, canary=canary,
+                 remediations=prev.get("remediations", []))
+    save_state(cfg["STATE_FILE"], state)
+    if cfg["HEARTBEAT_URL"] and not any(f["status"] == "critical" for f in findings):
+        try:
+            urllib.request.urlopen(cfg["HEARTBEAT_URL"], timeout=10)
+        except (urllib.error.URLError, OSError):
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,11 @@
+[Unit]
+Description=Wazuh self-monitoring probe
+Documentation=https://github.com/SAMsploit1/shellcatch/tree/master/detections/wazuh-selfmon
+# Deliberately no Requires=/BindsTo=wazuh-manager: this must run when the manager is dead.
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wazuh-selfmon -c /etc/wazuh-selfmon.conf
+TimeoutStartSec=240
+Nice=5

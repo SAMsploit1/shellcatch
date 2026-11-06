@@ -12,6 +12,7 @@ Site: https://samsploit1.github.io/shellcatch/
 | 2026-10-27 | Revision | Ambassador review feedback addressed (9 points) | [details](#review-feedback--2026-10-27) | Pushed 2026-10-27; site live; PR #122 synced (5c0090e, runtests 40/40) |
 | 2026-10-24 | Upstream PR | Web-to-shell integration for `wazuh/integrations` | [PR #122](https://github.com/wazuh/integrations/pull/122) | Open — awaiting review |
 | 2026-11-05 | Detection content + write-up | web-to-shell migrated to Wazuh 5.0 (Sigma rules, correlation monitors, tested on rc2) | [detections/web-to-shell/wazuh5](detections/web-to-shell/wazuh5) · [draft post](content/blog-wazuh5-migration.md) | Built and validated on a live 5.0.0-rc2 lab; not yet committed or published |
+| 2026-11-06 | Ops content | wazuh-selfmon: Wazuh self-monitoring pack (probe, canary, out-of-band alerts, rules 100800-100819) | [detections/wazuh-selfmon](detections/wazuh-selfmon) | Built; 22/22 logtest, 7 fault scenarios reproduced on Azure 4.14.9; not committed; write-up drafted at content/blog-wazuh-selfmon.md (byline TBD) |
 
 ---
 
@@ -123,6 +124,30 @@ apache-http integrations.
 
 **Next:** file the issues; possibly a fix PR to `wazuh-indexer-security-analytics`;
 add `integrations/web_to_shell` 5.0 content next to PR #122; publish the post.
+
+## Contribution 5 — wazuh-selfmon (2026-11-06)
+
+**Type:** Operational content (monitoring probe + rules + installer) + write-up to come
+**Platform:** Wazuh 4.14.9 all-in-one, Ubuntu 24.04, Azure lab `vm-wazuh-lab` (France Central)
+
+Wazuh watching Wazuh, built from four real outages where every service said
+`active` while events were being lost. A stdlib-Python probe on its own systemd
+timer (outside the manager's process tree) checks daemons by process, analysisd/remoted/UDP
+loss, wazuh-db RSS, indexer health/watermarks/blocks/ISM, and runs an
+end-to-end canary that names the stalled stage. CRITICALs also go out-of-band
+via webhook. Optional rate-limited repair.
+
+- 22/22 logtest cases (every rule, plus a frequency rule and a negative case)
+- 7 fault scenarios reproduced live, each detected, notified and reported as recovered
+- Findings worth the write-up: the stock unit is `RemainAfterExit=yes`, so it
+  reports `active` with every daemon SIGKILLed and `Restart=on-failure` can't
+  work; a watchdog repairing from its own oneshot unit gets its repaired
+  daemon SIGTERMed by systemd 13 s later (cgroup); `only-future-events no` makes
+  outage-time alerts arrive after recovery; unattended-upgrades/needrestart
+  restarts the manager
+
+**Next:** review [draft post](content/blog-wazuh-selfmon.md); dashboard + screenshots; decide whether to offer it to
+`wazuh/integrations` (needs the README template), but only when Vigan says so.
 
 ## Pipeline / ideas
 

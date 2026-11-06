@@ -1,0 +1,267 @@
+[
+ {
+  "name": "canary heartbeat is indexed",
+  "selfmon": {
+   "check": "canary",
+   "status": "ok",
+   "canary": "0f3c9a",
+   "message": "self-monitor heartbeat",
+   "host": "lab-manager"
+  },
+  "expect_id": "100801",
+  "expect_level": 3
+ },
+ {
+  "name": "plain ok record stays silent",
+  "selfmon": {
+   "check": "indexer.health",
+   "status": "ok",
+   "message": "cluster is green",
+   "host": "lab-manager"
+  },
+  "expect_id": "100802",
+  "expect_level": 0
+ },
+ {
+  "name": "recovery is reported",
+  "selfmon": {
+   "check": "indexer.health",
+   "status": "ok",
+   "recovered": true,
+   "previous_status": "critical",
+   "message": "cluster is green",
+   "host": "lab-manager"
+  },
+  "expect_id": "100803",
+  "expect_level": 5
+ },
+ {
+  "name": "generic warn",
+  "selfmon": {
+   "check": "indexer.health",
+   "status": "warn",
+   "message": "cluster is yellow, 4 unassigned shards",
+   "host": "lab-manager"
+  },
+  "expect_id": "100804",
+  "expect_level": 7
+ },
+ {
+  "name": "generic high",
+  "selfmon": {
+   "check": "indexer.ism",
+   "status": "high",
+   "message": "3 indices have a failed ISM step",
+   "host": "lab-manager"
+  },
+  "expect_id": "100805",
+  "expect_level": 10
+ },
+ {
+  "name": "generic critical",
+  "selfmon": {
+   "check": "indexer.reachable",
+   "status": "critical",
+   "message": "indexer unreachable",
+   "host": "lab-manager"
+  },
+  "expect_id": "100806",
+  "expect_level": 13
+ },
+ {
+  "name": "unit active but wazuh-db missing",
+  "selfmon": {
+   "check": "manager.daemons",
+   "status": "critical",
+   "missing": "wazuh-db",
+   "message": "wazuh-manager.service is active but these daemons are not running: wazuh-db",
+   "host": "lab-manager"
+  },
+  "expect_id": "100810",
+  "expect_level": 13
+ },
+ {
+  "name": "non-core daemon missing is high, not 100810",
+  "selfmon": {
+   "check": "manager.daemons",
+   "status": "high",
+   "missing": "wazuh-apid",
+   "message": "... not running: wazuh-apid",
+   "host": "lab-manager"
+  },
+  "expect_id": "100805",
+  "expect_level": 10
+ },
+ {
+  "name": "manager down (read from backlog)",
+  "selfmon": {
+   "check": "manager.unit",
+   "status": "critical",
+   "unit_state": "failed",
+   "observed_at": "2026-11-06T13:10:00Z",
+   "message": "wazuh-manager.service is failed",
+   "host": "lab-manager"
+  },
+  "expect_id": "100811",
+  "expect_level": 13
+ },
+ {
+  "name": "pipeline canary stalled",
+  "selfmon": {
+   "check": "pipeline.canary",
+   "status": "high",
+   "stage": "the manager wrote it to alerts.json, so the break is after the manager: filebeat or the indexer",
+   "message": "canary not indexed",
+   "host": "lab-manager"
+  },
+  "expect_id": "100812",
+  "expect_level": 10
+ },
+ {
+  "name": "flood-stage write block",
+  "selfmon": {
+   "check": "indexer.blocks",
+   "status": "critical",
+   "blocked": 12,
+   "message": "12 indices carry read_only_allow_delete",
+   "host": "lab-manager"
+  },
+  "expect_id": "100813",
+  "expect_level": 13
+ },
+ {
+  "name": "analysisd drops high",
+  "selfmon": {
+   "check": "analysisd.drops",
+   "status": "high",
+   "drop_pct": 23.5,
+   "message": "analysisd dropped 2350 of 10000 events (23.5%)",
+   "host": "lab-manager"
+  },
+  "expect_id": "100814",
+  "expect_level": 10
+ },
+ {
+  "name": "analysisd drops critical",
+  "selfmon": {
+   "check": "analysisd.drops",
+   "status": "critical",
+   "drop_pct": 83.0,
+   "message": "analysisd dropped 83%",
+   "host": "lab-manager"
+  },
+  "expect_id": "100814",
+  "expect_level": 10
+ },
+ {
+  "name": "analysisd drops warn stays generic",
+  "selfmon": {
+   "check": "analysisd.drops",
+   "status": "warn",
+   "drop_pct": 2.0,
+   "message": "analysisd dropped 2%",
+   "host": "lab-manager"
+  },
+  "expect_id": "100804",
+  "expect_level": 7
+ },
+ {
+  "name": "udp receive buffer loss",
+  "selfmon": {
+   "check": "udp.rcvbuf",
+   "status": "warn",
+   "rcvbuf_errors": 5120,
+   "message": "kernel dropped 5120 UDP datagrams",
+   "host": "lab-manager"
+  },
+  "expect_id": "100815",
+  "expect_level": 10
+ },
+ {
+  "name": "wazuh-db memory critical",
+  "selfmon": {
+   "check": "wazuh-db.memory",
+   "status": "critical",
+   "rss_mb": 16400,
+   "message": "wazuh-db resident memory is 16400 MB",
+   "host": "lab-manager"
+  },
+  "expect_id": "100816",
+  "expect_level": 10
+ },
+ {
+  "name": "remediation succeeded",
+  "selfmon": {
+   "check": "remediation",
+   "status": "high",
+   "result": "recovered",
+   "action": "wazuh-control start",
+   "message": "ran 'wazuh-control start'; all daemons are running again",
+   "host": "lab-manager"
+  },
+  "expect_id": "100817",
+  "expect_level": 7
+ },
+ {
+  "name": "remediation failed is critical",
+  "selfmon": {
+   "check": "remediation",
+   "status": "critical",
+   "result": "failed",
+   "action": "wazuh-control start",
+   "message": "still missing: wazuh-db",
+   "host": "lab-manager"
+  },
+  "expect_id": "100806",
+  "expect_level": 13
+ },
+ {
+  "name": "repair loop 1/3",
+  "selfmon": {
+   "check": "remediation",
+   "status": "high",
+   "result": "recovered",
+   "message": "repair 1",
+   "host": "lab-manager"
+  },
+  "expect_id": "100817",
+  "expect_level": 7,
+  "session": true
+ },
+ {
+  "name": "repair loop 2/3",
+  "selfmon": {
+   "check": "remediation",
+   "status": "high",
+   "result": "recovered",
+   "message": "repair 2",
+   "host": "lab-manager"
+  },
+  "expect_id": "100817",
+  "expect_level": 7,
+  "session": true
+ },
+ {
+  "name": "repair loop 3/3 fires 100818",
+  "selfmon": {
+   "check": "remediation",
+   "status": "high",
+   "result": "recovered",
+   "message": "repair 3",
+   "host": "lab-manager"
+  },
+  "expect_id": "100818",
+  "expect_level": 12,
+  "session": true
+ },
+ {
+  "name": "non-selfmon json is ignored",
+  "selfmon": {
+   "check": "",
+   "status": "critical",
+   "message": "x"
+  },
+  "expect_id": null,
+  "expect_level": null
+ }
+]

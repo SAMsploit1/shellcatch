@@ -20,4 +20,13 @@ MITRE-mapped, validated 42/42 against a live
 
 ---
 
+### [wazuh-selfmon (Wazuh watching Wazuh)](detections/wazuh-selfmon)
+Catches the outages where every service says `active` and nothing is being
+processed: missing daemons, analysisd and UDP event loss, flood-stage write
+blocks, failed ISM, a wedged filebeat (via an end-to-end canary). CRITICALs go
+out-of-band, because a dead manager can't alert about itself. 22/22 logtest
+cases and 7 fault scenarios reproduced on a live 4.14.9 stack.
+
+---
+
 See [SUBMISSIONS.md](SUBMISSIONS.md) for the full contribution log.

@@ -1,0 +1,129 @@
+<!--
+  wazuh-selfmon rules (IDs 100800-100819)
+  Turns the JSON lines written by the wazuh-selfmon probe into alerts.
+  The probe only writes a line when a check changes state (plus an hourly
+  reminder), so each alert here is news.
+
+  Copyright (C) Nullroute Labs. GPLv2, like the Wazuh ruleset.
+-->
+<group name="wazuh_selfmon,">
+
+  <!-- Base: any selfmon record. Stock json decoder; fields land in data.selfmon.* -->
+  <rule id="100800" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="selfmon.check">\.+</field>
+    <description>Wazuh self-monitor record</description>
+  </rule>
+
+  <!-- Severity tiers -->
+  <rule id="100802" level="0">
+    <if_sid>100800</if_sid>
+    <field name="selfmon.status">^ok$</field>
+    <description>Wazuh self-monitor: $(selfmon.check) OK</description>
+  </rule>
+
+  <!-- Canary. Level 3 on purpose: it has to be indexed, because the next probe
+       run looks for it in wazuh-alerts-* to prove the whole pipeline works. -->
+  <rule id="100801" level="3">
+    <if_sid>100802</if_sid>
+    <field name="selfmon.check">^canary$</field>
+    <description>Wazuh self-monitor heartbeat (pipeline canary)</description>
+    <group>selfmon_canary,</group>
+  </rule>
+
+  <rule id="100803" level="5">
+    <if_sid>100802</if_sid>
+    <field name="selfmon.recovered">^true$</field>
+    <description>Wazuh self-monitor: $(selfmon.check) recovered (was $(selfmon.previous_status)): $(selfmon.message)</description>
+    <group>selfmon_recovered,</group>
+  </rule>
+
+  <rule id="100804" level="7">
+    <if_sid>100800</if_sid>
+    <field name="selfmon.status">^warn$</field>
+    <description>Wazuh self-monitor WARN: $(selfmon.check): $(selfmon.message)</description>
+  </rule>
+
+  <rule id="100805" level="10">
+    <if_sid>100800</if_sid>
+    <field name="selfmon.status">^high$</field>
+    <description>Wazuh self-monitor HIGH: $(selfmon.check): $(selfmon.message)</description>
+  </rule>
+
+  <rule id="100806" level="13">
+    <if_sid>100800</if_sid>
+    <field name="selfmon.status">^critical$</field>
+    <description>Wazuh self-monitor CRITICAL: $(selfmon.check): $(selfmon.message)</description>
+  </rule>
+
+  <!-- Named failure modes: same severity, clearer title, and a group to filter on -->
+
+  <rule id="100810" level="13">
+    <if_sid>100806</if_sid>
+    <field name="selfmon.check">^manager.daemons$</field>
+    <description>Wazuh manager unit is active but daemons are missing: $(selfmon.missing)</description>
+    <mitre><id>T1562.001</id></mitre>
+    <group>selfmon_daemon_missing,</group>
+  </rule>
+
+  <!-- Usually seen after the fact: the probe kept writing while the manager
+       was down, and logcollector reads the backlog when it comes back. -->
+  <rule id="100811" level="13">
+    <if_sid>100806</if_sid>
+    <field name="selfmon.check">^manager.unit$</field>
+    <description>Wazuh manager was not running at $(selfmon.observed_at) ($(selfmon.unit_state)): events were not analysed</description>
+    <mitre><id>T1562.001</id></mitre>
+    <group>selfmon_manager_down,</group>
+  </rule>
+
+  <rule id="100812" level="10">
+    <if_sid>100805</if_sid>
+    <field name="selfmon.check">^pipeline.canary$</field>
+    <description>Wazuh pipeline stalled: canary not indexed. $(selfmon.stage)</description>
+    <group>selfmon_pipeline_stall,</group>
+  </rule>
+
+  <rule id="100813" level="13">
+    <if_sid>100806</if_sid>
+    <field name="selfmon.check">^indexer.blocks$</field>
+    <description>Wazuh indexer is rejecting writes (flood-stage watermark): $(selfmon.message)</description>
+    <group>selfmon_indexer_block,</group>
+  </rule>
+
+  <rule id="100814" level="10">
+    <if_sid>100805, 100806</if_sid>
+    <field name="selfmon.check">^analysisd.drops$</field>
+    <description>Wazuh analysisd is dropping events: $(selfmon.message)</description>
+    <group>selfmon_event_loss,</group>
+  </rule>
+
+  <rule id="100815" level="10">
+    <if_sid>100804, 100805</if_sid>
+    <field name="selfmon.check">^udp.rcvbuf$</field>
+    <description>UDP syslog loss on the Wazuh manager: $(selfmon.message)</description>
+    <group>selfmon_event_loss,</group>
+  </rule>
+
+  <rule id="100816" level="10">
+    <if_sid>100805, 100806</if_sid>
+    <field name="selfmon.check">^wazuh-db.memory$</field>
+    <description>wazuh-db memory is high: $(selfmon.message)</description>
+    <group>selfmon_wdb_memory,</group>
+  </rule>
+
+  <rule id="100817" level="7">
+    <if_sid>100805</if_sid>
+    <field name="selfmon.check">^remediation$</field>
+    <field name="selfmon.result">^recovered$</field>
+    <description>Wazuh self-monitor repaired the manager: $(selfmon.message)</description>
+    <group>selfmon_remediation,</group>
+  </rule>
+
+  <!-- Three repairs in an hour means something keeps killing the manager. -->
+  <rule id="100818" level="12" frequency="3" timeframe="3600">
+    <if_matched_group>selfmon_remediation</if_matched_group>
+    <description>Wazuh self-monitor repaired the manager 3 times in an hour: find out what keeps killing it</description>
+    <group>selfmon_remediation_loop,</group>
+  </rule>
+
+</group>
