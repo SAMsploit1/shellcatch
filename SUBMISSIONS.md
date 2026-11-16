@@ -159,3 +159,30 @@ via webhook. Optional rate-limited repair.
 - SCA policy for an app with no stock CIS coverage — could fold into the
   `web_to_shell` integration's `sca/` slot (web-server hardening: PHP
   `disable_functions`, writable webroot, `www-data` shell)
+
+
+## MCP activity lab — reviewer revision (2026-11-16)
+
+Farouk Musa's four review requests addressed in `mcp-wazuh-lab` and the
+`SAMsploit1.github.io/posts/mcp-wazuh-evidence.html` publication source:
+
+- Real-deployment telemetry guidance: SDK tool wrappers, gateways/proxies,
+  desktop/IDE logs, normalization and Wazuh agent file collection.
+- Wazuh-owned credential-path policy for file reads and transfer source paths;
+  application sensitivity labels no longer drive matching.
+- Broader Unix shell paths plus Python `-c` and Node `-e`/`--eval` rules.
+- ATT&CK tags: T1552.001, T1059.004, T1048 (loopback-only lab analogy),
+  T1059.006 and T1059.007. MCP range: 110500–110505.
+
+Validation: XML and 66 static policy regressions passed. The revised runner
+passed 70/70 cases on Wazuh 4.14.10 in a disposable two-core GitHub Codespace:
+48 positive detections and 22 negative controls. All events decoded as JSON;
+positive levels and ATT&CK IDs were verified from raw output. Evidence and source
+hashes are in `mcp-wazuh-lab/results/2026-11-16/`. Containers and the test
+Codespace were deleted after retrieval. Historical eight-case results are labeled.
+Status: published on 2026-11-16. Code and evidence merged through
+[SAMsploit1/mcp-wazuh-lab#1](https://github.com/SAMsploit1/mcp-wazuh-lab/pull/1);
+article merged through [SAMsploit1.github.io#1](https://github.com/SAMsploit1/SAMsploit1.github.io/pull/1).
+GitHub Pages deployment succeeded; the [live article](https://samsploit1.github.io/posts/mcp-wazuh-evidence.html)
+was verified against the merged source. No reply was sent to the reviewer.
+Independent host telemetry and end-to-end ingestion remain open.
