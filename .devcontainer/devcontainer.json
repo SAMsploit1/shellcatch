@@ -7,7 +7,9 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    // Needed for `gh codespace ssh` (headless test runs from the terminal or an agent).
+    "ghcr.io/devcontainers/features/sshd:1": {}
   },
 
   // Logtest-only manager fits in 2 cores / 8 GB. Bump to 4-core for the full stack.
