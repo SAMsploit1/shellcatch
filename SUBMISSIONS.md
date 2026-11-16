@@ -163,7 +163,7 @@ via webhook. Optional rate-limited repair.
 
 ## MCP activity lab — reviewer revision (2026-11-16)
 
-Farouk Musa's four review requests addressed locally in `mcp-wazuh-lab` and the
+Farouk Musa's four review requests addressed in `mcp-wazuh-lab` and the
 `SAMsploit1.github.io/posts/mcp-wazuh-evidence.html` publication source:
 
 - Real-deployment telemetry guidance: SDK tool wrappers, gateways/proxies,
@@ -180,7 +180,9 @@ passed 70/70 cases on Wazuh 4.14.10 in a disposable two-core GitHub Codespace:
 positive levels and ATT&CK IDs were verified from raw output. Evidence and source
 hashes are in `mcp-wazuh-lab/results/2026-11-16/`. Containers and the test
 Codespace were deleted after retrieval. Historical eight-case results are labeled.
-Status: tested changes on `codex/mcp-review-feedback` feature branches in
-`mcp-wazuh-lab`, `SAMsploit1.github.io`, and `shellcatch`; live publication and
-reviewer submission remain pending.
+Status: published on 2026-11-16. Code and evidence merged through
+[SAMsploit1/mcp-wazuh-lab#1](https://github.com/SAMsploit1/mcp-wazuh-lab/pull/1);
+article merged through [SAMsploit1.github.io#1](https://github.com/SAMsploit1/SAMsploit1.github.io/pull/1).
+GitHub Pages deployment succeeded; the [live article](https://samsploit1.github.io/posts/mcp-wazuh-evidence.html)
+was verified against the merged source. No reply was sent to the reviewer.
 Independent host telemetry and end-to-end ingestion remain open.
