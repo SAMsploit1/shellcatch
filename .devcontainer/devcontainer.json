@@ -1,0 +1,25 @@
+{
+  // Disposable Wazuh test lab for GitHub Codespaces.
+  // Create -> test -> delete. See .devcontainer/README.md.
+  "name": "shellcatch Wazuh lab",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // Logtest-only manager fits in 2 cores / 8 GB. Bump to 4-core for the full stack.
+  "hostRequirements": { "cpus": 2, "memory": "8gb" },
+
+  // Pre-pull the manager image so the first test run is fast. Non-fatal if it fails.
+  "postCreateCommand": "bash .devcontainer/lab.sh pull || true",
+  "postAttachCommand": "bash .devcontainer/lab.sh help",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["redhat.vscode-xml", "redhat.vscode-yaml", "ms-python.python"]
+    }
+  }
+}
